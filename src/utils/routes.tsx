@@ -1,17 +1,18 @@
 import { createBrowserRouter } from "react-router";
-import StudentDashboard from "../pages/StudentDashboard";
-import StudentView from "../pages/StudentView";
-import AddStudent from "../pages/AddStudent";
-import EditStudent from "../pages/EditStudent";
-import TeacherDashboard from "../pages/TeacherDashboard";
-import TeacherView from "../pages/TeacherView";
-import AddTeacher from "../pages/AddTeacher";
-import EditTeacher from "../pages/EditTeacher";
-import Reports from "../pages/Reports";
-import AttendanceResult from "../pages/AttendanceResult";
-import ManageClasses from "../pages/ManageClasses";
-import ManageSubjects from "../pages/ManageSubjects";
-import FaceRecognition from "../pages/FaceRecognition";
+import StudentDashboard from "../pages/admin/StudentDashboard";
+import StudentView from "../pages/admin/StudentView";
+import AddStudent from "../pages/admin/AddStudent";
+import EditStudent from "../pages/admin/EditStudent";
+import TeacherDashboard from "../pages/admin/TeacherDashboard";
+import TeacherView from "../pages/admin/TeacherView";
+import AddTeacher from "../pages/admin/AddTeacher";
+import EditTeacher from "../pages/admin/EditTeacher";
+import Reports from "../pages/admin/Reports";
+import AttendanceResult from "../pages/admin/AttendanceResult";
+import ManageClasses from "../pages/admin/ManageClasses";
+import ManageSubjects from "../pages/admin/ManageSubjects";
+import FaceRecognition from "../pages/admin/FaceRecognition";
+import HomePage from "../pages/user/HomePage";
 import DashboardLayout from "../components/DashboardLayout";
 
 export const router = createBrowserRouter([
@@ -34,6 +35,11 @@ export const router = createBrowserRouter([
       { path: "manage-subjects", Component: ManageSubjects },
       { path: "face-recognition", Component: FaceRecognition },
     ],
+  },
+  // User Routes
+  {
+    path: "/attendance",
+    Component: HomePage,
   },
   {
     path: "*",
