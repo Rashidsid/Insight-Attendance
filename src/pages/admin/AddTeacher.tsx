@@ -6,6 +6,7 @@ import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, Upload } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Subject {
   id: string;
@@ -16,6 +17,8 @@ interface Subject {
 export default function AddTeacher() {
   const navigate = useNavigate();
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -30,6 +33,7 @@ export default function AddTeacher() {
     qualification: '',
     experience: '',
     joiningDate: '',
+    photo: '',
   });
 
   // Load subjects from localStorage
@@ -55,15 +59,59 @@ export default function AddTeacher() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Mock submit - navigate back to teacher list
-    navigate('/teachers');
+    
+    // Get existing teachers from localStorage
+    const existingTeachers = JSON.parse(localStorage.getItem('teacherDetails') || '[]');
+    
+    // Create new teacher object with all form data
+    const newTeacher = {
+      id: Math.max(...existingTeachers.map((t: any) => t.id || 0), 0) + 1,
+      ...formData,
+      status: 'Active',
+      photo: photoFile,
+    };
+    
+    // Add to teachers list
+    existingTeachers.push(newTeacher);
+    localStorage.setItem('teacherDetails', JSON.stringify(existingTeachers));
+    
+    toast.success('Teacher added successfully!');
+    navigate('/admin/teachers');
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Check file size (5MB limit)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('File size must be less than 5MB');
+        return;
+      }
+      
+      // Check file type
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please upload an image file');
+        return;
+      }
+      
+      // Read file as base64
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64String = event.target?.result as string;
+        setPhotoPreview(base64String);
+        setPhotoFile(base64String);
+        setFormData({ ...formData, photo: base64String });
+        toast.success('Photo uploaded successfully!');
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   return (
     <div className="p-8">
       <div className="mb-8">
         <Button
-          onClick={() => navigate('/teachers')}
+          onClick={() => navigate('/admin/teachers')}
           variant="ghost"
           className="gap-2 mb-4 -ml-2"
         >
@@ -80,18 +128,50 @@ export default function AddTeacher() {
           <div className="col-span-1">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 sticky top-8">
               <Label className="mb-4 block">Teacher Photo</Label>
-              <div className="aspect-square bg-gray-100 rounded-2xl flex flex-col items-center justify-center mb-4 border-2 border-dashed border-gray-300">
-                <div className="w-16 h-16 bg-[#E7D7F6] rounded-full flex items-center justify-center mb-4">
-                  <Upload className="w-8 h-8 text-[#A982D9]" />
-                </div>
-                <p className="text-sm text-gray-600 mb-2">Upload teacher photo</p>
-                <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
+              <div className="aspect-square bg-gray-100 rounded-2xl flex flex-col items-center justify-center mb-4 border-2 border-dashed border-gray-300 overflow-hidden">
+                {photoPreview ? (
+                  <img src={photoPreview} alt="Teacher preview" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="w-16 h-16 bg-[#E7D7F6] rounded-full flex items-center justify-center mb-4">
+                      <Upload className="w-8 h-8 text-[#A982D9]" />
+                    </div>
+                    <p className="text-sm text-gray-600 mb-2">Upload teacher photo</p>
+                    <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
-                <Button type="button" variant="outline" className="w-full rounded-xl gap-2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                  id="photo-upload"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-xl gap-2"
+                  onClick={() => document.getElementById('photo-upload')?.click()}
+                >
                   <Upload className="w-4 h-4" />
-                  Upload Photo
+                  {photoPreview ? 'Change Photo' : 'Upload Photo'}
                 </Button>
+                {photoPreview && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full rounded-xl text-red-600 hover:text-red-700"
+                    onClick={() => {
+                      setPhotoPreview(null);
+                      setPhotoFile(null);
+                      setFormData({ ...formData, photo: '' });
+                    }}
+                  >
+                    Remove Photo
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -192,13 +272,13 @@ export default function AddTeacher() {
                       {subjects.length === 0 && (
                         <div className="px-2 py-3 text-sm text-gray-500 text-center">
                           No subjects available.
-                          <button
-                            type="button"
-                            onClick={() => navigate('/manage-subjects')}
-                            className="text-[#A982D9] hover:underline block mt-1"
-                          >
-                            Add subjects here
-                          </button>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/admin/manage-subjects')}
+                          className="text-[#A982D9] hover:underline block mt-1"
+                        >
+                          Add subjects here
+                        </button>
                         </div>
                       )}
                     </SelectContent>
@@ -277,7 +357,7 @@ export default function AddTeacher() {
                 type="button"
                 variant="outline"
                 className="flex-1 h-12 rounded-xl"
-                onClick={() => navigate('/teachers')}
+                onClick={() => navigate('/admin/teachers')}
               >
                 Cancel
               </Button>

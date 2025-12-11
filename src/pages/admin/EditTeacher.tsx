@@ -6,6 +6,7 @@ import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, Upload } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Subject {
   id: string;
@@ -40,6 +41,7 @@ export default function EditTeacher() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -54,7 +56,7 @@ export default function EditTeacher() {
     qualification: '',
     experience: '',
     joiningDate: '',
-    password: '',
+    photo: '',
   });
 
   // Load teacher data
@@ -66,7 +68,11 @@ export default function EditTeacher() {
         ...teacher,
         classes: [],
         password: '', // Don't show actual password
+        photo: teacher.photo || '',
       });
+      if (teacher.photo) {
+        setPhotoPreview(teacher.photo);
+      }
     }
   }, [id]);
 
@@ -116,6 +122,7 @@ export default function EditTeacher() {
             qualification: formData.qualification,
             experience: formData.experience,
             joiningDate: formData.joiningDate,
+            photo: formData.photo,
           };
         }
         return teacher;
@@ -124,15 +131,43 @@ export default function EditTeacher() {
       localStorage.setItem('teacherDetails', JSON.stringify(updatedTeachers));
     }
     
+    toast.success('Teacher updated successfully!');
     // Navigate back to teacher list
-    navigate('/teachers');
+    navigate('/admin/teachers');
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Check file size (5MB limit)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('File size must be less than 5MB');
+        return;
+      }
+      
+      // Check file type
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please upload an image file');
+        return;
+      }
+      
+      // Read file as base64
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64String = event.target?.result as string;
+        setPhotoPreview(base64String);
+        setFormData({ ...formData, photo: base64String });
+        toast.success('Photo uploaded successfully!');
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   return (
     <div className="p-8">
       <div className="mb-8">
         <Button
-          onClick={() => navigate('/teachers')}
+          onClick={() => navigate('/admin/teachers')}
           variant="ghost"
           className="gap-2 mb-4 -ml-2"
         >
@@ -149,22 +184,49 @@ export default function EditTeacher() {
           <div className="col-span-1">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 sticky top-8">
               <Label className="mb-4 block">Teacher Photo</Label>
-              <div className="aspect-square bg-gray-100 rounded-2xl flex flex-col items-center justify-center mb-4 border-2 border-dashed border-gray-300">
-                <div className="w-16 h-16 bg-[#E7D7F6] rounded-full flex items-center justify-center mb-4">
-                  <Upload className="w-8 h-8 text-[#A982D9]" />
-                </div>
-                <p className="text-sm text-gray-600 mb-2">Upload teacher photo</p>
-                <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
+              <div className="aspect-square bg-gray-100 rounded-2xl flex flex-col items-center justify-center mb-4 border-2 border-dashed border-gray-300 overflow-hidden">
+                {photoPreview ? (
+                  <img src={photoPreview} alt="Teacher preview" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="w-16 h-16 bg-[#E7D7F6] rounded-full flex items-center justify-center mb-4">
+                      <Upload className="w-8 h-8 text-[#A982D9]" />
+                    </div>
+                    <p className="text-sm text-gray-600 mb-2">Upload teacher photo</p>
+                    <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
-                <Button type="button" variant="outline" className="w-full rounded-xl gap-2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                  id="photo-upload"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-xl gap-2"
+                  onClick={() => document.getElementById('photo-upload')?.click()}
+                >
                   <Upload className="w-4 h-4" />
-                  Upload Photo
+                  {photoPreview ? 'Change Photo' : 'Upload Photo'}
                 </Button>
-                <Button type="button" variant="outline" className="w-full rounded-xl gap-2">
-                  <Upload className="w-4 h-4" />
-                  Take Photo
-                </Button>
+                {photoPreview && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full rounded-xl text-red-600 hover:text-red-700"
+                    onClick={() => {
+                      setPhotoPreview(null);
+                      setFormData({ ...formData, photo: '' });
+                    }}
+                  >
+                    Remove Photo
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -265,13 +327,13 @@ export default function EditTeacher() {
                       {subjects.length === 0 && (
                         <div className="px-2 py-3 text-sm text-gray-500 text-center">
                           No subjects available.
-                          <button
-                            type="button"
-                            onClick={() => navigate('/manage-subjects')}
-                            className="text-[#A982D9] hover:underline block mt-1"
-                          >
-                            Add subjects here
-                          </button>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/admin/manage-subjects')}
+                          className="text-[#A982D9] hover:underline block mt-1"
+                        >
+                          Add subjects here
+                        </button>
                         </div>
                       )}
                     </SelectContent>
@@ -350,7 +412,7 @@ export default function EditTeacher() {
                 type="button"
                 variant="outline"
                 className="flex-1 h-12 rounded-xl"
-                onClick={() => navigate('/teachers')}
+                onClick={() => navigate('/admin/teachers')}
               >
                 Cancel
               </Button>

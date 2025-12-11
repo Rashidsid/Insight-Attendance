@@ -14,6 +14,17 @@ import {
   AlertDialogTitle,
 } from '../../components/ui/alert-dialog';
 
+interface Student {
+  id: number;
+  name: string;
+  rollNo: string;
+  class: string;
+  section: string;
+  attendance: string;
+  status: string;
+  photo?: string | null;
+}
+
 // Mock data
 const initialStudents = [
   { id: 1, name: 'Ram Kumar', rollNo: 'STU001', class: '10-A', section: 'Science', attendance: '92%', status: 'Active' },
@@ -65,8 +76,27 @@ const completeStudentData = [
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const { searchQuery } = useSearch();
-  const [students, setStudents] = useState(initialStudents);
+  const [students, setStudents] = useState<Student[]>(initialStudents as Student[]);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+
+  const handleStatusChange = (studentId: number, newStatus: string) => {
+    // Update local state
+    setStudents(prevStudents =>
+      prevStudents.map(student =>
+        student.id === studentId ? { ...student, status: newStatus } : student
+      )
+    );
+    
+    // Update localStorage
+    const storedDetails = localStorage.getItem('studentDetails');
+    if (storedDetails) {
+      const allStudents = JSON.parse(storedDetails);
+      const updatedStudents = allStudents.map((s: any) =>
+        s.id === studentId ? { ...s, status: newStatus } : s
+      );
+      localStorage.setItem('studentDetails', JSON.stringify(updatedStudents));
+    }
+  };
 
   // Initialize complete student data in localStorage on first load
   useEffect(() => {
@@ -88,7 +118,8 @@ export default function StudentDashboard() {
         class: s.class,
         section: s.section,
         attendance: s.attendance,
-        status: s.status
+        status: s.status,
+        photo: s.photo || null
       })));
     } else {
       // Fallback to status updates if no complete data
@@ -136,7 +167,7 @@ export default function StudentDashboard() {
           <p className="text-gray-600 mt-1">Manage and track student information</p>
         </div>
         <Button
-          onClick={() => navigate('/students/add')}
+          onClick={() => navigate('/admin/students/add')}
           className="bg-[#A982D9] hover:bg-[#9770C8] rounded-xl h-12 gap-2"
         >
           <UserPlus className="w-5 h-5" />
@@ -161,12 +192,13 @@ export default function StudentDashboard() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         {/* Table Header */}
         <div className="bg-[#A982D9] text-white h-[60px] px-6 flex items-center">
-          <div className="flex-1 grid grid-cols-7 gap-4">
+          <div className="flex-1 grid grid-cols-8 gap-4">
             <div className="col-span-1">Roll No</div>
             <div className="col-span-2">Student Name</div>
             <div className="col-span-1">Class</div>
             <div className="col-span-1">Section</div>
             <div className="col-span-1">Attendance</div>
+            <div className="col-span-1">Status</div>
             <div className="col-span-1 text-center">Actions</div>
           </div>
         </div>
@@ -177,23 +209,33 @@ export default function StudentDashboard() {
             <div
               key={student.id}
               className={`h-[88px] px-6 flex items-center ${
-                index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-              }`}
+                student.status === 'Inactive'
+                  ? 'bg-red-100 hover:bg-red-200'
+                  : index % 2 === 0
+                  ? 'bg-white hover:bg-gray-50'
+                  : 'bg-gray-50 hover:bg-gray-100'
+              } transition-colors`}
             >
-              <div className="flex-1 grid grid-cols-7 gap-4 items-center">
-                <div className="col-span-1 text-gray-900">{student.rollNo}</div>
+              <div className="flex-1 grid grid-cols-8 gap-4 items-center">
+                <div className="col-span-1 text-gray-900 font-medium">{student.rollNo}</div>
                 <div className="col-span-2">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-[#E7D7F6] rounded-full flex items-center justify-center text-[#A982D9]">
-                      {student.name.charAt(0)}
+                    <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-[#E7D7F6] text-[#A982D9] font-semibold text-sm overflow-hidden">
+                      {student.photo ? (
+                        <img src={student.photo} alt={student.name} className="w-full h-full object-cover" />
+                      ) : (
+                        student.name.charAt(0)
+                      )}
                     </div>
-                    <span className="text-gray-900">{student.name}</span>
+                    <span className={`${student.status === 'Inactive' ? 'text-red-900 font-medium' : 'text-gray-900'}`}>
+                      {student.name}
+                    </span>
                   </div>
                 </div>
-                <div className="col-span-1 text-gray-600">{student.class}</div>
-                <div className="col-span-1 text-gray-600">{student.section}</div>
+                <div className={`col-span-1 ${student.status === 'Inactive' ? 'text-red-900 font-medium' : 'text-gray-600'}`}>{student.class}</div>
+                <div className={`col-span-1 ${student.status === 'Inactive' ? 'text-red-900 font-medium' : 'text-gray-600'}`}>{student.section}</div>
                 <div className="col-span-1">
-                  <span className={`inline-block px-3 py-1 rounded-lg text-sm ${
+                  <span className={`inline-block px-3 py-1 rounded-lg text-sm font-medium ${
                     parseInt(student.attendance) >= 90
                       ? 'bg-green-100 text-green-700'
                       : parseInt(student.attendance) >= 80
@@ -203,15 +245,27 @@ export default function StudentDashboard() {
                     {student.attendance}
                   </span>
                 </div>
+                <div className="col-span-1">
+                  <button
+                    onClick={() => handleStatusChange(student.id, student.status === 'Active' ? 'Inactive' : 'Active')}
+                    className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                      student.status === 'Active'
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-red-200 text-red-800 hover:bg-red-300'
+                    }`}
+                  >
+                    {student.status}
+                  </button>
+                </div>
                 <div className="col-span-1 flex items-center justify-center gap-2">
                   <button 
-                    onClick={() => navigate(`/students/${student.id}`)}
+                    onClick={() => navigate(`/admin/students/${student.id}`)}
                     className="w-[30px] h-[30px] flex items-center justify-center hover:bg-gray-200 rounded-lg transition-colors"
                   >
                     <Eye className="w-4 h-4 text-gray-600" />
                   </button>
                   <button
-                    onClick={() => navigate(`/students/edit/${student.id}`)}
+                    onClick={() => navigate(`/admin/students/edit/${student.id}`)}
                     className="w-[30px] h-[30px] flex items-center justify-center hover:bg-gray-200 rounded-lg transition-colors"
                   >
                     <Edit className="w-4 h-4 text-gray-600" />

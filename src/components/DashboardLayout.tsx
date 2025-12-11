@@ -4,25 +4,25 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { useSearch } from '../contexts/SearchContext';
 
-export default function DashboardLayout() {
+export default function DashboardLayout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { searchQuery, setSearchQuery } = useSearch();
-  const isAdminRoute = location.pathname === '/face-recognition' || location.pathname === '/attendance-result' ? false : true;
+  const isAdminRoute = location.pathname.includes('/admin/face-recognition') || location.pathname.includes('/admin/attendance-result') ? false : true;
 
   const adminMenuItems = [
-    { icon: Users, label: 'Student List', path: '/students' },
-    { icon: UserPlus, label: 'Add Student', path: '/students/add' },
-    { icon: GraduationCap, label: 'Teacher List', path: '/teachers' },
-    { icon: UserPlus, label: 'Add Teacher', path: '/teachers/add' },
-    { icon: Settings, label: 'Manage Classes', path: '/manage-classes' },
-    { icon: Settings, label: 'Manage Subjects', path: '/manage-subjects' },
-    { icon: FileText, label: 'Reports', path: '/reports' },
+    { icon: Users, label: 'Student List', path: '/admin/students' },
+    { icon: UserPlus, label: 'Add Student', path: '/admin/students/add' },
+    { icon: GraduationCap, label: 'Teacher List', path: '/admin/teachers' },
+    { icon: UserPlus, label: 'Add Teacher', path: '/admin/teachers/add' },
+    { icon: Settings, label: 'Manage Classes', path: '/admin/manage-classes' },
+    { icon: Settings, label: 'Manage Subjects', path: '/admin/manage-subjects' },
+    { icon: FileText, label: 'Reports', path: '/admin/reports' },
   ];
 
   const userMenuItems = [
-    { icon: Camera, label: 'Face Recognition', path: '/face-recognition' },
-    { icon: ClipboardList, label: 'Attendance Result', path: '/attendance-result' },
+    { icon: Camera, label: 'Face Recognition', path: '/admin/face-recognition' },
+    { icon: ClipboardList, label: 'Attendance Result', path: '/admin/attendance-result' },
   ];
 
   const menuItems = isAdminRoute ? adminMenuItems : userMenuItems;
@@ -31,15 +31,9 @@ export default function DashboardLayout() {
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
       <div className="w-[280px] bg-[#E7D7F6] flex flex-col">
-        <div className="p-6">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="w-12 h-12 bg-[#A982D9] rounded-xl flex items-center justify-center">
-              <GraduationCap className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h3 className="text-gray-900">Attendance</h3>
-              <p className="text-sm text-gray-600">{isAdminRoute ? 'Admin Panel' : 'User Panel'}</p>
-            </div>
+        <div className="p-4">
+          <div className="flex items-center justify-center mb-8">
+            <img src="/images/admin.png" alt="Admin Panel" className="w-45 h-45 object-contain rounded-xl" />
           </div>
 
           <nav className="space-y-5">
@@ -66,7 +60,14 @@ export default function DashboardLayout() {
 
         <div className="mt-auto p-6">
           <Button
-            onClick={() => navigate('/')}
+            onClick={() => {
+              // Clear all auth data
+              localStorage.removeItem('isAdminLoggedIn');
+              localStorage.removeItem('adminEmail');
+              localStorage.removeItem('rememberAdmin');
+              // Redirect to login
+              navigate('/admin/login');
+            }}
             variant="ghost"
             className="w-full justify-start gap-3 text-gray-700 hover:bg-white/50"
           >
@@ -93,7 +94,7 @@ export default function DashboardLayout() {
 
         {/* Page Content */}
         <div className="flex-1 overflow-auto">
-          <Outlet />
+          {children || <Outlet />}
         </div>
       </div>
     </div>

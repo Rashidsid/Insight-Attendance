@@ -116,7 +116,7 @@ export default function ManageSubjects() {
     <div className="p-8">
       <div className="mb-8">
         <Button
-          onClick={() => navigate('/teachers')}
+          onClick={() => navigate('/admin/teachers')}
           variant="ghost"
           className="gap-2 mb-4 -ml-2"
         >

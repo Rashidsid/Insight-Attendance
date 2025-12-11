@@ -14,6 +14,17 @@ import {
   AlertDialogTitle,
 } from '../../components/ui/alert-dialog';
 
+interface Teacher {
+  id: number;
+  name: string;
+  teacherId: string;
+  subject: string;
+  classes: string;
+  status: string;
+  experience: string;
+  photo?: string | null;
+}
+
 // Mock data
 const initialTeachers = [
   { id: 1, name: 'Ram Kumar', teacherId: 'TCH001', subject: 'Mathematics', classes: '10-A, 10-B', status: 'Active', experience: '15 years' },
@@ -55,7 +66,7 @@ const completeTeacherData = [
 export default function TeacherDashboard() {
   const navigate = useNavigate();
   const { searchQuery } = useSearch();
-  const [teachers, setTeachers] = useState(initialTeachers);
+  const [teachers, setTeachers] = useState<Teacher[]>(initialTeachers as Teacher[]);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   // Initialize complete teacher data in localStorage on first load
@@ -78,7 +89,8 @@ export default function TeacherDashboard() {
         subject: t.subject,
         classes: t.classes,
         status: t.status,
-        experience: `${t.experience} years`
+        experience: `${t.experience} years`,
+        photo: t.photo || null
       })));
     } else {
       // Fallback to status updates if no complete data
@@ -126,7 +138,7 @@ export default function TeacherDashboard() {
           <p className="text-gray-600 mt-1">Manage and track teacher information</p>
         </div>
         <Button
-          onClick={() => navigate('/teachers/add')}
+          onClick={() => navigate('/admin/teachers/add')}
           className="bg-[#A982D9] hover:bg-[#9770C8] rounded-xl h-12 gap-2"
         >
           <UserPlus className="w-5 h-5" />
@@ -167,18 +179,22 @@ export default function TeacherDashboard() {
             <div
               key={teacher.id}
               className={`h-[88px] px-6 flex items-center ${
-                index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-              }`}
+                index % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-50 hover:bg-gray-100'
+              } transition-colors`}
             >
               <div className="flex-1 grid grid-cols-7 gap-4 items-center">
-                <div className="col-span-1 text-gray-900">{teacher.teacherId}</div>
+                <div className="col-span-1 text-gray-900 font-medium">{teacher.teacherId}</div>
                 <div className="col-span-2">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-[#E7D7F6] rounded-full flex items-center justify-center text-[#A982D9]">
-                      {teacher.name.split(' ')[1]?.charAt(0) || teacher.name.charAt(0)}
+                    <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-[#E7D7F6] text-[#A982D9] font-semibold text-sm overflow-hidden">
+                      {teacher.photo ? (
+                        <img src={teacher.photo} alt={teacher.name} className="w-full h-full object-cover" />
+                      ) : (
+                        teacher.name.split(' ')[1]?.charAt(0) || teacher.name.charAt(0)
+                      )}
                     </div>
                     <div>
-                      <div className="text-gray-900">{teacher.name}</div>
+                      <div className="text-gray-900 font-medium">{teacher.name}</div>
                       <div className="text-xs text-gray-500">{teacher.experience}</div>
                     </div>
                   </div>
@@ -186,7 +202,7 @@ export default function TeacherDashboard() {
                 <div className="col-span-1 text-gray-600">{teacher.subject}</div>
                 <div className="col-span-1 text-gray-600 text-sm">{teacher.classes}</div>
                 <div className="col-span-1">
-                  <span className={`inline-block px-3 py-1 rounded-lg text-sm ${
+                  <span className={`inline-block px-3 py-1 rounded-lg text-sm font-medium ${
                     teacher.status === 'Active'
                       ? 'bg-green-100 text-green-700'
                       : 'bg-orange-100 text-orange-700'
@@ -196,13 +212,13 @@ export default function TeacherDashboard() {
                 </div>
                 <div className="col-span-1 flex items-center justify-center gap-2">
                   <button
-                    onClick={() => navigate(`/teachers/${teacher.id}`)}
+                    onClick={() => navigate(`/admin/teachers/${teacher.id}`)}
                     className="w-[30px] h-[30px] flex items-center justify-center hover:bg-gray-200 rounded-lg transition-colors"
                   >
                     <Eye className="w-4 h-4 text-gray-600" />
                   </button>
                   <button
-                    onClick={() => navigate(`/teachers/edit/${teacher.id}`)}
+                    onClick={() => navigate(`/admin/teachers/edit/${teacher.id}`)}
                     className="w-[30px] h-[30px] flex items-center justify-center hover:bg-gray-200 rounded-lg transition-colors"
                   >
                     <Edit className="w-4 h-4 text-gray-600" />

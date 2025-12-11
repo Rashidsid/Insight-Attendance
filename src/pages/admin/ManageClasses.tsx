@@ -116,7 +116,7 @@ export default function ManageClasses() {
     <div className="p-8">
       <div className="mb-8">
         <Button
-          onClick={() => navigate('/students')}
+          onClick={() => navigate('/admin/students')}
           variant="ghost"
           className="gap-2 mb-4 -ml-2"
         >

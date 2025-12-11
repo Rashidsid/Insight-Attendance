@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
 import { ArrowLeft, Share2, Mail, Download, Phone, MapPin, Calendar, User, Award, TrendingUp, GraduationCap, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 import { generateTeacherReport, downloadReport, printReport } from '../../utils/reportGenerator';
@@ -23,6 +25,7 @@ const defaultTeacherData = {
   experience: '15',
   joiningDate: '2010-08-01',
   status: 'Active',
+  photo: null as string | null,
   attendance: {
     overall: '96%',
     thisMonth: '100%',
@@ -50,6 +53,9 @@ export default function TeacherView() {
   const [teacherData, setTeacherData] = useState(defaultTeacherData);
   const [attendanceRecords, setAttendanceRecords] = useState(teacherData.recentAttendance);
   const [status, setStatus] = useState(teacherData.status);
+  const [dateRange, setDateRange] = useState('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
   // Load teacher data from localStorage
   useEffect(() => {
@@ -75,6 +81,7 @@ export default function TeacherView() {
           joiningDate: teacher.joiningDate,
           status: teacher.status,
           attendance: teacher.attendance || defaultTeacherData.attendance,
+          photo: teacher.photo || null,
         };
         setTeacherData(formattedTeacher);
         setAttendanceRecords(formattedTeacher.recentAttendance);
@@ -87,13 +94,37 @@ export default function TeacherView() {
     const updated = [...attendanceRecords];
     updated[index] = { ...updated[index], status: newStatus };
     setAttendanceRecords(updated);
+    
+    // Save to localStorage
+    const storedDetails = localStorage.getItem('teacherDetails');
+    if (storedDetails) {
+      const allTeachers = JSON.parse(storedDetails);
+      const updatedTeachers = allTeachers.map((t: any) =>
+        t.id === parseInt(id || '0') ? {
+          ...t,
+          recentAttendance: updated
+        } : t
+      );
+      localStorage.setItem('teacherDetails', JSON.stringify(updatedTeachers));
+    }
+    
     toast.success(`Attendance updated to ${newStatus}`);
   };
 
   const handleStatusChange = (newStatus: string) => {
     setStatus(newStatus);
     
-    // Save to localStorage to sync with list page
+    // Update both teacherDetails and teacherStatusUpdates in localStorage
+    const storedDetails = localStorage.getItem('teacherDetails');
+    if (storedDetails) {
+      const allTeachers = JSON.parse(storedDetails);
+      const updatedTeachers = allTeachers.map((t: any) =>
+        t.id === parseInt(id || '0') ? { ...t, status: newStatus } : t
+      );
+      localStorage.setItem('teacherDetails', JSON.stringify(updatedTeachers));
+    }
+    
+    // Also update teacherStatusUpdates for backward compatibility
     const statusUpdates = JSON.parse(localStorage.getItem('teacherStatusUpdates') || '{}');
     statusUpdates[id || '1'] = newStatus;
     localStorage.setItem('teacherStatusUpdates', JSON.stringify(statusUpdates));
@@ -135,13 +166,38 @@ export default function TeacherView() {
     printReport(reportHTML);
   };
 
+  const getFilteredAttendance = () => {
+    if (dateRange === 'all') return teacherData.recentAttendance;
+
+    const today = new Date();
+    let startDate = new Date();
+
+    if (dateRange === '1month') {
+      startDate.setMonth(today.getMonth() - 1);
+    } else if (dateRange === '2months') {
+      startDate.setMonth(today.getMonth() - 2);
+    } else if (dateRange === '3months') {
+      startDate.setMonth(today.getMonth() - 3);
+    } else if (dateRange === 'custom' && customStartDate && customEndDate) {
+      startDate = new Date(customStartDate);
+      today.setTime(new Date(customEndDate).getTime());
+    } else {
+      return teacherData.recentAttendance;
+    }
+
+    return teacherData.recentAttendance.filter(record => {
+      const recordDate = new Date(record.date);
+      return recordDate >= startDate && recordDate <= today;
+    });
+  };
+
   return (
     <div className="p-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <Button
-            onClick={() => navigate('/teachers')}
+            onClick={() => navigate('/admin/teachers')}
             variant="ghost"
             className="gap-2"
           >
@@ -181,8 +237,12 @@ export default function TeacherView() {
           {/* Profile Card */}
           <div className="bg-gradient-to-br from-[#A982D9] to-[#8B5FBF] rounded-2xl p-6 text-white">
             <div className="flex flex-col items-center text-center">
-              <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center text-5xl backdrop-blur-sm mb-4">
-                {teacherData.name.charAt(0)}
+              <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center text-5xl backdrop-blur-sm mb-4 overflow-hidden flex-shrink-0">
+                {teacherData.photo ? (
+                  <img src={teacherData.photo} alt={teacherData.name} className="w-full h-full object-cover" />
+                ) : (
+                  teacherData.name.charAt(0)
+                )}
               </div>
               <h2 className="text-white mb-1">{teacherData.name}</h2>
               <p className="text-white/80 mb-4">ID: {teacherData.teacherId}</p>
@@ -409,44 +469,96 @@ export default function TeacherView() {
 
           {/* Recent Attendance History */}
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <h3 className="mb-6">Recent Attendance History</h3>
-            <div className="space-y-3">
-              {attendanceRecords.map((record, index) => (
-                <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                  <div className="flex items-center gap-4">
-                    <div className="text-center min-w-[60px]">
-                      <p className="text-lg">{new Date(record.date).getDate()}</p>
-                      <p className="text-xs text-gray-500 uppercase">
-                        {new Date(record.date).toLocaleDateString('en-US', { weekday: 'short' })}
-                      </p>
-                    </div>
-                    <div className="h-10 w-px bg-gray-300" />
-                    <div>
-                      <p className="text-gray-900">{record.date}</p>
-                      <p className="text-sm text-gray-500">{record.time}</p>
-                    </div>
-                  </div>
-                  <Select
-                    value={record.status}
-                    onValueChange={(value) => handleAttendanceChange(index, value)}
-                  >
-                    <SelectTrigger className={`w-[120px] border-0 ${
-                      record.status === 'Present'
-                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                        : record.status === 'Absent'
-                        ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                        : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                    }`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Present">Present</SelectItem>
-                      <SelectItem value="Absent">Absent</SelectItem>
-                      <SelectItem value="Late">Late</SelectItem>
-                    </SelectContent>
-                  </Select>
+            <div className="flex items-center justify-between mb-6">
+              <h3>Recent Attendance History</h3>
+              <div className="flex gap-2">
+                <Select value={dateRange} onValueChange={(value) => {
+                  setDateRange(value);
+                  if (value !== 'custom') {
+                    setCustomStartDate('');
+                    setCustomEndDate('');
+                  }
+                }}>
+                  <SelectTrigger className="w-[150px] h-10 rounded-lg">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="1month">Last 1 Month</SelectItem>
+                    <SelectItem value="2months">Last 2 Months</SelectItem>
+                    <SelectItem value="3months">Last 3 Months</SelectItem>
+                    <SelectItem value="custom">Custom Range</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {dateRange === 'custom' && (
+              <div className="flex gap-3 mb-4">
+                <div>
+                  <Label className="text-xs">From Date</Label>
+                  <Input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="h-10 rounded-lg"
+                  />
                 </div>
-              ))}
+                <div>
+                  <Label className="text-xs">To Date</Label>
+                  <Input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="h-10 rounded-lg"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {getFilteredAttendance().length > 0 ? (
+                getFilteredAttendance().map((record, index) => (
+                  <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className="text-center min-w-[60px]">
+                        <p className="text-lg font-semibold">{new Date(record.date).getDate()}</p>
+                        <p className="text-xs text-gray-500 uppercase">
+                          {new Date(record.date).toLocaleDateString('en-US', { weekday: 'short' })}
+                        </p>
+                      </div>
+                      <div className="h-10 w-px bg-gray-300" />
+                      <div>
+                        <p className="text-gray-900 font-medium">{record.date}</p>
+                        <p className="text-sm text-gray-500">{record.time}</p>
+                      </div>
+                    </div>
+                    <Select
+                      value={record.status}
+                      onValueChange={(value) => handleAttendanceChange(index, value)}
+                    >
+                      <SelectTrigger className={`w-[120px] border-0 ${
+                        record.status === 'Present'
+                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                          : record.status === 'Absent'
+                          ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                          : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                      }`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Present">Present</SelectItem>
+                        <SelectItem value="Absent">Absent</SelectItem>
+                        <SelectItem value="Late">Late</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  No attendance records found for the selected date range
+                </div>
+              )}
             </div>
           </div>
         </div>

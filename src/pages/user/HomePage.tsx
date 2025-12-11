@@ -158,6 +158,9 @@ export default function HomePage() {
   };
 
   useEffect(() => {
+    // Set page title for home page
+    document.title = 'Insight Attendance System - Face Recognition';
+    
     return () => {
       stopCamera();
     };
@@ -369,7 +372,7 @@ export default function HomePage() {
               {/* Status Message */}
               <div>
                 <label
-                  className={`text-sm font-semibold uppercase tracking-wide mb-2 block flex items-center gap-2 ${
+                  className={`text-sm font-semibold uppercase tracking-wide mb-2 flex items-center gap-2 ${
                     recognitionResult?.matched ? 'text-green-400' : 'text-yellow-400'
                   }`}
                 >

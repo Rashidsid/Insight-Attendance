@@ -1,4 +1,5 @@
 import { createBrowserRouter } from "react-router";
+import Login from "../pages/admin/Login";
 import StudentDashboard from "../pages/admin/StudentDashboard";
 import StudentView from "../pages/admin/StudentView";
 import AddStudent from "../pages/admin/AddStudent";
@@ -13,9 +14,14 @@ import ManageClasses from "../pages/admin/ManageClasses";
 import ManageSubjects from "../pages/admin/ManageSubjects";
 import FaceRecognition from "../pages/admin/FaceRecognition";
 import HomePage from "../pages/user/HomePage";
-import DashboardLayout from "../components/DashboardLayout";
+import ProtectedLayout from "../components/ProtectedRoute";
 
 export const router = createBrowserRouter([
+  // Login Route
+  {
+    path: "/admin/login",
+    Component: Login,
+  },
   // Home/User Routes - Face Recognition Page
   {
     path: "/",
@@ -25,10 +31,10 @@ export const router = createBrowserRouter([
     path: "/user",
     Component: HomePage,
   },
-  // Admin Routes
+  // Admin Routes - Protected
   {
     path: "/admin",
-    Component: DashboardLayout,
+    Component: ProtectedLayout,
     children: [
       { index: true, Component: StudentDashboard },
       { path: "students", Component: StudentDashboard },
