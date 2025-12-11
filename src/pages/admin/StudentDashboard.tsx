@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Button } from '../components/ui/button';
+import { Button } from '../../components/ui/button';
 import { Edit, Trash2, Eye, UserPlus } from 'lucide-react';
-import { useSearch } from '../contexts/SearchContext';
+import { useSearch } from '../../contexts/SearchContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,7 +12,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '../components/ui/alert-dialog';
+} from '../../components/ui/alert-dialog';
 
 // Mock data
 const initialStudents = [

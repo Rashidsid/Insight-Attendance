@@ -26,8 +26,8 @@ export default function HomePage() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'user',
-          width: { ideal: 640 },
-          height: { ideal: 480 }
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         },
         audio: false
       });
@@ -37,16 +37,20 @@ export default function HomePage() {
         streamRef.current = stream;
         setCameraActive(true);
 
-        videoRef.current.onloadedmetadata = () => {
+        // Ensure video plays immediately
+        videoRef.current.play().catch(err => console.error('Play error:', err));
+
+        // Start detection after stream is ready
+        setTimeout(() => {
           startFaceDetection();
-        };
+        }, 500);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Camera access denied';
       setError(errorMessage);
       console.error('Camera Error:', err);
-      // Fallback: Allow user to continue with simulated detection
       setCameraActive(true);
+      // Still allow simulation even if camera fails
       setTimeout(() => {
         startFaceDetection();
       }, 1000);
@@ -208,21 +212,13 @@ export default function HomePage() {
                 </button>
               ) : (
                 <>
-                  {videoRef.current?.srcObject ? (
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-700 to-slate-600">
-                      <div className="w-32 h-32 bg-slate-500 rounded-full flex items-center justify-center">
-                        <UserCircle className="w-20 h-20 text-slate-300" />
-                      </div>
-                    </div>
-                  )}
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover bg-black"
+                  />
 
                   {/* Loading Spinner */}
                   {isRecognizing && (

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { Button } from '../components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Button } from '../../components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { ArrowLeft, Share2, Mail, Download, Phone, MapPin, Calendar, User, Award, TrendingUp, GraduationCap, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
-import { generateTeacherReport, downloadReport, printReport } from '../utils/reportGenerator';
+import { generateTeacherReport, downloadReport, printReport } from '../../utils/reportGenerator';
 
 // Default mock teacher data
 const defaultTeacherData = {

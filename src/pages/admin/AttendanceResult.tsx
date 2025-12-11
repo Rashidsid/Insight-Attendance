@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Calendar, TrendingUp, Clock, Award } from 'lucide-react';
-import { Button } from '../components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Button } from '../../components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 
 // Mock data
 const attendanceHistory = [

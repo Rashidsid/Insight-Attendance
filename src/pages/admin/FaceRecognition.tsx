@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Button } from '../components/ui/button';
+import { Button } from '../../components/ui/button';
 import { Camera, Scan, CheckCircle, XCircle, User, Clock, Calendar } from 'lucide-react';
 
 export default function FaceRecognition() {
