@@ -38,7 +38,7 @@ export const router = createBrowserRouter([
   },
   // User Routes
   {
-    path: "/attendance",
+    path: "/user",
     Component: HomePage,
   },
   {

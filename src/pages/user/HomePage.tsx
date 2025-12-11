@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Camera, UserCircle, AlertCircle, CheckCircle, LogOut } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Camera, UserCircle, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface RecognitionResult {
   id: string;
@@ -17,7 +17,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const activateCamera = async () => {
@@ -157,13 +157,6 @@ export default function HomePage() {
     setFaceDetected(false);
   };
 
-  const logout = () => {
-    stopCamera();
-    resetRecognition();
-    // TODO: Add logout logic here
-    console.log('User logged out');
-  };
-
   useEffect(() => {
     return () => {
       stopCamera();
@@ -187,15 +180,6 @@ export default function HomePage() {
           <line x1="70%" y1="50%" x2="90%" y2="35%" stroke="#60A5FA" strokeWidth="1" opacity="0.3" />
         </svg>
       </div>
-
-      {/* Logout Button */}
-      <button
-        onClick={logout}
-        className="absolute top-6 right-6 z-50 p-3 hover:bg-red-500/20 rounded-lg transition-colors text-red-400 hover:text-red-300"
-        title="Logout"
-      >
-        <LogOut className="w-6 h-6" />
-      </button>
 
       {/* Main Content */}
       <div className="relative h-full flex items-center justify-center px-8">
@@ -227,7 +211,6 @@ export default function HomePage() {
                       height: '100%',
                       objectFit: 'cover',
                       backgroundColor: '#000',
-                      display: 'block',
                       transform: 'scaleX(-1)' // Mirror the video
                     }}
                   />
@@ -420,8 +403,8 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Try Again Button */}
-              {recognitionResult && (
+              {/* Try Again Button - Only show on error or unmatched result */}
+              {recognitionResult && !recognitionResult.matched && (
                 <button
                   onClick={resetRecognition}
                   className="w-full px-6 py-3 bg-[#A982D9] hover:bg-[#9771C8] text-white rounded-lg transition-colors font-semibold mt-4 transform hover:scale-105"
