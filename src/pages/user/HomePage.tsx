@@ -23,37 +23,42 @@ export default function HomePage() {
   const activateCamera = async () => {
     try {
       setError(null);
-      const stream = await navigator.mediaDevices.getUserMedia({
+      setCameraActive(true); // Set active immediately to show video element
+      
+      // Request camera access
+      const constraints = {
         video: {
           facingMode: 'user',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { min: 320, ideal: 640, max: 1280 },
+          height: { min: 240, ideal: 480, max: 960 }
         },
         audio: false
-      });
+      };
 
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
       if (videoRef.current) {
+        // Set srcObject to stream
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
-        setCameraActive(true);
+        
+        // Play the video
+        const playPromise = videoRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(err => {
+            console.error('Play error:', err);
+            setError('Failed to play video stream');
+          });
+        }
 
-        // Ensure video plays immediately
-        videoRef.current.play().catch(err => console.error('Play error:', err));
-
-        // Start detection after stream is ready
-        setTimeout(() => {
-          startFaceDetection();
-        }, 500);
+        // Start face detection
+        setTimeout(() => startFaceDetection(), 1000);
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Camera access denied';
-      setError(errorMessage);
+      const errorMessage = err instanceof Error ? err.message : 'Camera access denied or not available';
+      setError(`Camera Error: ${errorMessage}`);
       console.error('Camera Error:', err);
-      setCameraActive(true);
-      // Still allow simulation even if camera fails
-      setTimeout(() => {
-        startFaceDetection();
-      }, 1000);
+      setCameraActive(false);
     }
   };
 
@@ -217,7 +222,14 @@ export default function HomePage() {
                     autoPlay
                     playsInline
                     muted
-                    className="w-full h-full object-cover bg-black"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      backgroundColor: '#000',
+                      display: 'block',
+                      transform: 'scaleX(-1)' // Mirror the video
+                    }}
                   />
 
                   {/* Loading Spinner */}
