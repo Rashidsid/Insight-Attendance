@@ -16,8 +16,18 @@ import HomePage from "../pages/user/HomePage";
 import DashboardLayout from "../components/DashboardLayout";
 
 export const router = createBrowserRouter([
+  // Home/User Routes - Face Recognition Page
   {
     path: "/",
+    Component: HomePage,
+  },
+  {
+    path: "/user",
+    Component: HomePage,
+  },
+  // Admin Routes
+  {
+    path: "/admin",
     Component: DashboardLayout,
     children: [
       { index: true, Component: StudentDashboard },
@@ -36,13 +46,8 @@ export const router = createBrowserRouter([
       { path: "face-recognition", Component: FaceRecognition },
     ],
   },
-  // User Routes
-  {
-    path: "/user",
-    Component: HomePage,
-  },
   {
     path: "*",
-    Component: StudentDashboard,
+    Component: HomePage,
   },
 ]);
