@@ -4,8 +4,15 @@ dist/
 build/
 
 # Environment variables
+.env
 .env.local
 .env.*.local
+
+# Documentation/Setup files (not needed for running website)
+FIREBASE_DATABASE_SCHEMA.md
+FIREBASE_QUICK_REFERENCE.md
+FIREBASE_SETUP_GUIDE.md
+FIREBASE_SETUP_SUMMARY.md
 
 # Logs
 *.log
