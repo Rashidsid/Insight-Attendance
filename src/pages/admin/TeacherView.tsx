@@ -4,9 +4,9 @@ import { Button } from '../../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { ArrowLeft, Share2, Mail, Download, Phone, MapPin, Calendar, User, Award, TrendingUp, GraduationCap, Briefcase } from 'lucide-react';
+import { ArrowLeft, Mail, Download, Phone, MapPin, Calendar, User, Award, TrendingUp, GraduationCap, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
-import { generateTeacherReport, downloadReport, printReport } from '../../utils/reportGenerator';
+import { generateTeacherReport, downloadReport } from '../../utils/reportGenerator';
 
 // Default mock teacher data
 const defaultTeacherData = {
@@ -134,7 +134,7 @@ export default function TeacherView() {
 
   const handleShareReport = async () => {
     setIsSharing(true);
-    const reportHTML = generateTeacherReport({
+    generateTeacherReport({
       ...teacherData,
       recentAttendance: attendanceRecords
     });
@@ -156,14 +156,6 @@ export default function TeacherView() {
     });
     const filename = `${teacherData.name.replace(/ /g, '_')}_Attendance_Report_${new Date().toISOString().split('T')[0]}.html`;
     downloadReport(reportHTML, filename);
-  };
-
-  const handlePrintReport = () => {
-    const reportHTML = generateTeacherReport({
-      ...teacherData,
-      recentAttendance: attendanceRecords
-    });
-    printReport(reportHTML);
   };
 
   const getFilteredAttendance = () => {

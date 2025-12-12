@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { addStudent, uploadStudentPhoto, updateStudent } from '../../services/studentService';
 
 interface ClassSection {
   id: string;
@@ -18,7 +19,8 @@ export default function AddStudent() {
   const navigate = useNavigate();
   const [classes, setClasses] = useState<ClassSection[]>([]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [photoFile, setPhotoFile] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -33,8 +35,6 @@ export default function AddStudent() {
     parentName: '',
     parentPhone: '',
     parentEmail: '',
-    password: '',
-    photo: '',
   });
 
   // Load classes from localStorage
@@ -58,27 +58,44 @@ export default function AddStudent() {
     }
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Get existing students from localStorage
-    const existingStudents = JSON.parse(localStorage.getItem('studentDetails') || '[]');
-    
-    // Create new student object with all form data
-    const newStudent = {
-      id: Math.max(...existingStudents.map((s: any) => s.id || 0), 0) + 1,
-      ...formData,
-      status: 'Active',
-      attendance: '0%',
-      photo: photoFile,
-    };
-    
-    // Add to students list
-    existingStudents.push(newStudent);
-    localStorage.setItem('studentDetails', JSON.stringify(existingStudents));
-    
-    toast.success('Student added successfully!');
-    navigate('/admin/students');
+    try {
+      setLoading(true);
+
+      // Create student object
+      const newStudent = {
+        ...formData,
+        status: 'Active',
+        attendance: '0%',
+        recentAttendance: [],
+      };
+
+      // Add student to Firebase
+      const studentId = await addStudent(newStudent as any);
+
+      // Upload photo if provided
+      if (photoFile) {
+        try {
+          const photoURL = await uploadStudentPhoto(studentId, photoFile);
+          // Update student with photo URL
+          await updateStudent(studentId, { photo: photoURL });
+          toast.success('Photo uploaded successfully!');
+        } catch (photoError) {
+          console.error('Photo upload error:', photoError);
+          toast.error('Student added but photo upload failed');
+        }
+      }
+
+      toast.success('Student added successfully!');
+      navigate('/admin/students');
+    } catch (error) {
+      console.error('Error adding student:', error);
+      toast.error('Failed to add student');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,14 +113,15 @@ export default function AddStudent() {
         return;
       }
       
-      // Read file as base64
+      // Store file object for upload
+      setPhotoFile(file);
+      
+      // Read file for preview
       const reader = new FileReader();
       reader.onload = (event) => {
-        const base64String = event.target?.result as string;
-        setPhotoPreview(base64String);
-        setPhotoFile(base64String);
-        setFormData({ ...formData, photo: base64String });
-        toast.success('Photo uploaded successfully!');
+        const previewUrl = event.target?.result as string;
+        setPhotoPreview(previewUrl);
+        toast.success('Photo selected successfully!');
       };
       reader.readAsDataURL(file);
     }
@@ -168,7 +186,6 @@ export default function AddStudent() {
                     onClick={() => {
                       setPhotoPreview(null);
                       setPhotoFile(null);
-                      setFormData({ ...formData, photo: '' });
                     }}
                   >
                     Remove Photo
@@ -374,14 +391,16 @@ export default function AddStudent() {
                 variant="outline"
                 className="flex-1 h-12 rounded-xl"
                 onClick={() => navigate('/admin/students')}
+                disabled={loading}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 className="flex-1 h-12 rounded-xl bg-[#A982D9] hover:bg-[#9770C8]"
+                disabled={loading}
               >
-                Add Student
+                {loading ? 'Adding...' : 'Add Student'}
               </Button>
             </div>
           </div>

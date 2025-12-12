@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { getStudentById, updateStudent, uploadStudentPhoto } from '../../services/studentService';
 
 interface ClassSection {
   id: string;
@@ -14,34 +15,14 @@ interface ClassSection {
   section: string;
 }
 
-// Mock student data - in real app, this would come from API/database
-const getStudentData = (studentId: number) => {
-  // Try to get from localStorage first
-  const stored = localStorage.getItem('studentDetails');
-  if (stored) {
-    const allStudents = JSON.parse(stored);
-    const found = allStudents.find((s: any) => s.id === studentId);
-    if (found) return found;
-  }
-  
-  // Fallback to mock data
-  const mockStudents = [
-    { id: 1, firstName: 'Ram', lastName: 'Kumar', rollNo: 'STU001', class: '10-A', section: 'Science', dateOfBirth: '2008-05-15', gender: 'Male', email: 'ram@example.com', phone: '+91 98765 43210', address: '123 Main St, City', parentName: 'Raj Kumar', parentPhone: '+91 98765 43211', parentEmail: 'raj.kumar@example.com' },
-    { id: 2, firstName: 'Shyam', lastName: 'Singh', rollNo: 'STU002', class: '10-A', section: 'Science', dateOfBirth: '2008-08-22', gender: 'Male', email: 'shyam@example.com', phone: '+91 98765 43212', address: '456 Oak Ave, Town', parentName: 'Vikram Singh', parentPhone: '+91 98765 43213', parentEmail: 'vikram.singh@example.com' },
-    { id: 3, firstName: 'Farhan', lastName: 'Ahmed', rollNo: 'STU003', class: '10-B', section: 'Commerce', dateOfBirth: '2008-03-10', gender: 'Male', email: 'farhan@example.com', phone: '+91 98765 43214', address: '789 Elm St, Village', parentName: 'Akram Ahmed', parentPhone: '+91 98765 43215', parentEmail: 'akram.ahmed@example.com' },
-    { id: 4, firstName: 'Shoaib', lastName: 'Khan', rollNo: 'STU004', class: '10-A', section: 'Science', dateOfBirth: '2008-11-05', gender: 'Male', email: 'shoaib@example.com', phone: '+91 98765 43216', address: '321 Pine Rd, City', parentName: 'Iqbal Khan', parentPhone: '+91 98765 43217', parentEmail: 'iqbal.khan@example.com' },
-    { id: 5, firstName: 'Saif', lastName: 'Ali', rollNo: 'STU005', class: '9-A', section: 'Arts', dateOfBirth: '2009-01-20', gender: 'Male', email: 'saif@example.com', phone: '+91 98765 43218', address: '654 Maple Dr, Town', parentName: 'Ali Hassan', parentPhone: '+91 98765 43219', parentEmail: 'ali.hassan@example.com' },
-    { id: 6, firstName: 'Siddiqui', lastName: 'Hassan', rollNo: 'STU006', class: '10-B', section: 'Commerce', dateOfBirth: '2008-07-12', gender: 'Male', email: 'siddiqui@example.com', phone: '+91 98765 43220', address: '789 Cedar Ln, Village', parentName: 'Hassan Siddiqui', parentPhone: '+91 98765 43221', parentEmail: 'hassan.siddiqui@example.com' },
-  ];
-  
-  return mockStudents.find(s => s.id === studentId);
-};
-
 export default function EditStudent() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [classes, setClasses] = useState<ClassSection[]>([]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadingStudent, setLoadingStudent] = useState(true);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -56,85 +37,89 @@ export default function EditStudent() {
     parentName: '',
     parentPhone: '',
     parentEmail: '',
-    password: '',
-    photo: '',
   });
 
-  // Load student data
+  // Load student data from Firebase
   useEffect(() => {
-    const studentId = parseInt(id || '0');
-    const student = getStudentData(studentId);
-    if (student) {
-      setFormData({
-        ...student,
-        password: '', // Don't show actual password
-        photo: student.photo || '',
-      });
-      if (student.photo) {
-        setPhotoPreview(student.photo);
+    const loadStudent = async () => {
+      try {
+        if (!id) return;
+        const student = await getStudentById(id);
+        if (student) {
+          setFormData({
+            firstName: student.firstName,
+            lastName: student.lastName,
+            rollNo: student.rollNo,
+            class: student.class,
+            section: student.section,
+            dateOfBirth: student.dateOfBirth,
+            gender: student.gender,
+            email: student.email || '',
+            phone: student.phone || '',
+            address: student.address || '',
+            parentName: student.parentName,
+            parentPhone: student.parentPhone,
+            parentEmail: student.parentEmail || '',
+          });
+          if (student.photo) {
+            setPhotoPreview(student.photo);
+          }
+        } else {
+          toast.error('Student not found');
+          navigate('/admin/students');
+        }
+      } catch (error) {
+        toast.error('Failed to load student');
+        console.error(error);
+      } finally {
+        setLoadingStudent(false);
       }
-    }
-  }, [id]);
+    };
+    loadStudent();
+  }, [id, navigate]);
 
-  // Load classes from localStorage
+  // Load default classes
   useEffect(() => {
-    const stored = localStorage.getItem('classes');
-    if (stored) {
-      setClasses(JSON.parse(stored));
-    } else {
-      // Default classes if none exist
-      const defaultClasses = [
-        { id: '1', name: '9', section: 'A' },
-        { id: '2', name: '9', section: 'B' },
-        { id: '3', name: '10', section: 'A' },
-        { id: '4', name: '10', section: 'B' },
-        { id: '5', name: '11', section: 'A' },
-        { id: '6', name: '11', section: 'B' },
-        { id: '7', name: '12', section: 'A' },
-        { id: '8', name: '12', section: 'B' },
-      ];
-      setClasses(defaultClasses);
-    }
+    const defaultClasses = [
+      { id: '1', name: '9', section: 'A' },
+      { id: '2', name: '9', section: 'B' },
+      { id: '3', name: '10', section: 'A' },
+      { id: '4', name: '10', section: 'B' },
+      { id: '5', name: '11', section: 'A' },
+      { id: '6', name: '11', section: 'B' },
+      { id: '7', name: '12', section: 'A' },
+      { id: '8', name: '12', section: 'B' },
+    ];
+    setClasses(defaultClasses);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Save updated student data to localStorage
-    const studentId = parseInt(id || '0');
-    const storedDetails = localStorage.getItem('studentDetails');
-    
-    if (storedDetails) {
-      const allStudents = JSON.parse(storedDetails);
-      const updatedStudents = allStudents.map((student: any) => {
-        if (student.id === studentId) {
-          return {
-            ...student,
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            rollNo: formData.rollNo,
-            class: formData.class,
-            section: formData.section,
-            dateOfBirth: formData.dateOfBirth,
-            gender: formData.gender,
-            email: formData.email,
-            phone: formData.phone,
-            address: formData.address,
-            parentName: formData.parentName,
-            parentPhone: formData.parentPhone,
-            parentEmail: formData.parentEmail,
-            photo: formData.photo,
-          };
-        }
-        return student;
+    try {
+      setLoading(true);
+      if (!id) return;
+
+      let photoURL = photoPreview;
+
+      // Upload new photo if changed
+      if (photoFile) {
+        photoURL = await uploadStudentPhoto(id, photoFile);
+      }
+
+      // Update student data
+      await updateStudent(id, {
+        ...formData,
+        photo: photoURL || undefined,
       });
-      
-      localStorage.setItem('studentDetails', JSON.stringify(updatedStudents));
+
+      toast.success('Student updated successfully!');
+      navigate('/admin/students');
+    } catch (error) {
+      toast.error('Failed to update student');
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
-    
-    toast.success('Student updated successfully!');
-    // Navigate back to student list
-    navigate('/admin/students');
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,20 +130,20 @@ export default function EditStudent() {
         toast.error('File size must be less than 5MB');
         return;
       }
-      
+
       // Check file type
       if (!file.type.startsWith('image/')) {
         toast.error('Please upload an image file');
         return;
       }
-      
-      // Read file as base64
+
+      // Store file for upload and create preview
+      setPhotoFile(file);
       const reader = new FileReader();
       reader.onload = (event) => {
-        const base64String = event.target?.result as string;
-        setPhotoPreview(base64String);
-        setFormData({ ...formData, photo: base64String });
-        toast.success('Photo uploaded successfully!');
+        const previewUrl = event.target?.result as string;
+        setPhotoPreview(previewUrl);
+        toast.success('Photo selected successfully!');
       };
       reader.readAsDataURL(file);
     }
@@ -166,20 +151,26 @@ export default function EditStudent() {
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <Button
-          onClick={() => navigate('/admin/students')}
-          variant="ghost"
-          className="gap-2 mb-4 -ml-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Students
-        </Button>
-        <h1>Edit Student</h1>
-        <p className="text-gray-600 mt-1">Update student information below</p>
-      </div>
+      {loadingStudent ? (
+        <div className="flex items-center justify-center h-96">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#A982D9]"></div>
+        </div>
+      ) : (
+        <>
+          <div className="mb-8">
+            <Button
+              onClick={() => navigate('/admin/students')}
+              variant="ghost"
+              className="gap-2 mb-4 -ml-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Students
+            </Button>
+            <h1>Edit Student</h1>
+            <p className="text-gray-600 mt-1">Update student information below</p>
+          </div>
 
-      <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-3 gap-8">
           {/* Left Column - Photo Upload */}
           <div className="col-span-1">
@@ -222,7 +213,7 @@ export default function EditStudent() {
                     className="w-full rounded-xl text-red-600 hover:text-red-700"
                     onClick={() => {
                       setPhotoPreview(null);
-                      setFormData({ ...formData, photo: '' });
+                      setPhotoFile(null);
                     }}
                   >
                     Remove Photo
@@ -425,19 +416,23 @@ export default function EditStudent() {
                 variant="outline"
                 className="flex-1 h-12 rounded-xl"
                 onClick={() => navigate('/admin/students')}
+                disabled={loading}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 className="flex-1 h-12 rounded-xl bg-[#A982D9] hover:bg-[#9770C8]"
+                disabled={loading}
               >
-                Update Student
+                {loading ? 'Updating...' : 'Update Student'}
               </Button>
             </div>
           </div>
         </div>
       </form>
+        </>
+      )}
     </div>
   );
 }
