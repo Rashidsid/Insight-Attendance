@@ -7,20 +7,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, Upload } from 'lucide-react';
 import { toast } from 'sonner';
-import { getStudentById, updateStudent, uploadStudentPhoto } from '../../services/studentService';
-
-interface ClassSection {
-  id: string;
-  name: string;
-  section: string;
-}
+import { getStudentById, updateStudent } from '../../services/studentService';
+import { getUniqueClassNames, getSectionsForClass } from '../../services/classService';
 
 export default function EditStudent() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [classes, setClasses] = useState<ClassSection[]>([]);
+  const [classNames, setClassNames] = useState<string[]>([]);
+  const [sections, setSections] = useState<string[]>([]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingStudent, setLoadingStudent] = useState(true);
   const [formData, setFormData] = useState({
@@ -64,6 +59,11 @@ export default function EditStudent() {
           if (student.photo) {
             setPhotoPreview(student.photo);
           }
+          // Load sections for the current class
+          if (student.class) {
+            const sectionsForClass = await getSectionsForClass(student.class);
+            setSections(sectionsForClass);
+          }
         } else {
           toast.error('Student not found');
           navigate('/admin/students');
@@ -78,20 +78,39 @@ export default function EditStudent() {
     loadStudent();
   }, [id, navigate]);
 
-  // Load default classes
+  // Load class names from Firebase
   useEffect(() => {
-    const defaultClasses = [
-      { id: '1', name: '9', section: 'A' },
-      { id: '2', name: '9', section: 'B' },
-      { id: '3', name: '10', section: 'A' },
-      { id: '4', name: '10', section: 'B' },
-      { id: '5', name: '11', section: 'A' },
-      { id: '6', name: '11', section: 'B' },
-      { id: '7', name: '12', section: 'A' },
-      { id: '8', name: '12', section: 'B' },
-    ];
-    setClasses(defaultClasses);
+    loadClassNames();
   }, []);
+
+  const loadClassNames = async () => {
+    try {
+      const names = await getUniqueClassNames();
+      setClassNames(names);
+    } catch (error) {
+      console.error('Error loading class names:', error);
+      toast.error('Failed to load classes');
+    }
+  };
+
+  // Load sections when class changes
+  useEffect(() => {
+    if (formData.class) {
+      loadSectionsForClass();
+    } else {
+      setSections([]);
+    }
+  }, [formData.class]);
+
+  const loadSectionsForClass = async () => {
+    try {
+      const sectionsForClass = await getSectionsForClass(formData.class);
+      setSections(sectionsForClass);
+    } catch (error) {
+      console.error('Error loading sections:', error);
+      toast.error('Failed to load sections');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,17 +118,10 @@ export default function EditStudent() {
       setLoading(true);
       if (!id) return;
 
-      let photoURL = photoPreview;
-
-      // Upload new photo if changed
-      if (photoFile) {
-        photoURL = await uploadStudentPhoto(id, photoFile);
-      }
-
-      // Update student data
+      // Update student data with base64 photo
       await updateStudent(id, {
         ...formData,
-        photo: photoURL || undefined,
+        photo: photoPreview || undefined,
       });
 
       toast.success('Student updated successfully!');
@@ -137,8 +149,6 @@ export default function EditStudent() {
         return;
       }
 
-      // Store file for upload and create preview
-      setPhotoFile(file);
       const reader = new FileReader();
       reader.onload = (event) => {
         const previewUrl = event.target?.result as string;
@@ -213,7 +223,6 @@ export default function EditStudent() {
                     className="w-full rounded-xl text-red-600 hover:text-red-700"
                     onClick={() => {
                       setPhotoPreview(null);
-                      setPhotoFile(null);
                     }}
                   >
                     Remove Photo
@@ -280,21 +289,21 @@ export default function EditStudent() {
                       <SelectValue placeholder="Select class" />
                     </SelectTrigger>
                     <SelectContent>
-                      {classes.map((cls) => (
-                        <SelectItem key={cls.id} value={`${cls.name}-${cls.section}`}>
-                          {cls.name}-{cls.section}
+                      {classNames.map((className) => (
+                        <SelectItem key={className} value={className}>
+                          {className}
                         </SelectItem>
                       ))}
-                      {classes.length === 0 && (
+                      {classNames.length === 0 && (
                         <div className="px-2 py-3 text-sm text-gray-500 text-center">
                           No classes available.
-                        <button
-                          type="button"
-                          onClick={() => navigate('/admin/manage-classes')}
-                          className="text-[#A982D9] hover:underline block mt-1"
-                        >
-                          Add classes here
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => navigate('/admin/manage-classes')}
+                            className="text-[#A982D9] hover:underline block mt-1"
+                          >
+                            Add classes here
+                          </button>
                         </div>
                       )}
                     </SelectContent>
@@ -302,14 +311,25 @@ export default function EditStudent() {
                 </div>
                 <div>
                   <Label htmlFor="section">Section *</Label>
-                  <Select value={formData.section} onValueChange={(value: string) => setFormData({ ...formData, section: value })}>
+                  <Select 
+                    value={formData.section} 
+                    onValueChange={(value: string) => setFormData({ ...formData, section: value })}
+                    disabled={!formData.class}
+                  >
                     <SelectTrigger className="h-12 rounded-xl mt-2">
-                      <SelectValue placeholder="Select section" />
+                      <SelectValue placeholder={formData.class ? "Select section" : "Select class first"} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Science">Science</SelectItem>
-                      <SelectItem value="Commerce">Commerce</SelectItem>
-                      <SelectItem value="Arts">Arts</SelectItem>
+                      {sections.map((section) => (
+                        <SelectItem key={section} value={section}>
+                          {section}
+                        </SelectItem>
+                      ))}
+                      {sections.length === 0 && formData.class && (
+                        <div className="px-2 py-3 text-sm text-gray-500 text-center">
+                          No sections available for this class
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

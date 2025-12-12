@@ -7,19 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, Upload } from 'lucide-react';
 import { toast } from 'sonner';
-import { addStudent, uploadStudentPhoto, updateStudent } from '../../services/studentService';
-
-interface ClassSection {
-  id: string;
-  name: string;
-  section: string;
-}
+import { addStudent } from '../../services/studentService';
+import { getUniqueClassNames, getSectionsForClass } from '../../services/classService';
 
 export default function AddStudent() {
   const navigate = useNavigate();
-  const [classes, setClasses] = useState<ClassSection[]>([]);
+  const [classNames, setClassNames] = useState<string[]>([]);
+  const [sections, setSections] = useState<string[]>([]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
@@ -37,26 +32,41 @@ export default function AddStudent() {
     parentEmail: '',
   });
 
-  // Load classes from localStorage
+  // Load class names from Firebase
   useEffect(() => {
-    const stored = localStorage.getItem('classes');
-    if (stored) {
-      setClasses(JSON.parse(stored));
-    } else {
-      // Default classes if none exist
-      const defaultClasses = [
-        { id: '1', name: '9', section: 'A' },
-        { id: '2', name: '9', section: 'B' },
-        { id: '3', name: '10', section: 'A' },
-        { id: '4', name: '10', section: 'B' },
-        { id: '5', name: '11', section: 'A' },
-        { id: '6', name: '11', section: 'B' },
-        { id: '7', name: '12', section: 'A' },
-        { id: '8', name: '12', section: 'B' },
-      ];
-      setClasses(defaultClasses);
-    }
+    loadClassNames();
   }, []);
+
+  const loadClassNames = async () => {
+    try {
+      const names = await getUniqueClassNames();
+      setClassNames(names);
+    } catch (error) {
+      console.error('Error loading class names:', error);
+      toast.error('Failed to load classes');
+    }
+  };
+
+  // Load sections when class changes
+  useEffect(() => {
+    if (formData.class) {
+      loadSectionsForClass();
+    } else {
+      setSections([]);
+    }
+  }, [formData.class]);
+
+  const loadSectionsForClass = async () => {
+    try {
+      const sectionsForClass = await getSectionsForClass(formData.class);
+      setSections(sectionsForClass);
+      // Reset section when class changes
+      setFormData(prev => ({ ...prev, section: '' }));
+    } catch (error) {
+      console.error('Error loading sections:', error);
+      toast.error('Failed to load sections');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,35 +74,39 @@ export default function AddStudent() {
     try {
       setLoading(true);
 
-      // Create student object
+      // Create student object with base64 photo if provided
       const newStudent = {
         ...formData,
         status: 'Active',
         attendance: '0%',
         recentAttendance: [],
+        photo: photoPreview || null, // Store base64 directly in Firestore
       };
 
       // Add student to Firebase
-      const studentId = await addStudent(newStudent as any);
-
-      // Upload photo if provided
-      if (photoFile) {
-        try {
-          const photoURL = await uploadStudentPhoto(studentId, photoFile);
-          // Update student with photo URL
-          await updateStudent(studentId, { photo: photoURL });
-          toast.success('Photo uploaded successfully!');
-        } catch (photoError) {
-          console.error('Photo upload error:', photoError);
-          toast.error('Student added but photo upload failed');
-        }
-      }
-
+      await addStudent(newStudent as any);
+      
       toast.success('Student added successfully!');
+      setFormData({
+        firstName: '',
+        lastName: '',
+        rollNo: '',
+        class: '',
+        section: '',
+        dateOfBirth: '',
+        gender: '',
+        email: '',
+        phone: '',
+        address: '',
+        parentName: '',
+        parentPhone: '',
+        parentEmail: '',
+      });
+      setPhotoPreview(null);
       navigate('/admin/students');
     } catch (error) {
       console.error('Error adding student:', error);
-      toast.error('Failed to add student');
+      toast.error(error instanceof Error ? error.message : 'Failed to add student');
     } finally {
       setLoading(false);
     }
@@ -112,9 +126,6 @@ export default function AddStudent() {
         toast.error('Please upload an image file');
         return;
       }
-      
-      // Store file object for upload
-      setPhotoFile(file);
       
       // Read file for preview
       const reader = new FileReader();
@@ -185,7 +196,6 @@ export default function AddStudent() {
                     className="w-full rounded-xl text-red-600 hover:text-red-700"
                     onClick={() => {
                       setPhotoPreview(null);
-                      setPhotoFile(null);
                     }}
                   >
                     Remove Photo
@@ -252,12 +262,12 @@ export default function AddStudent() {
                       <SelectValue placeholder="Select class" />
                     </SelectTrigger>
                     <SelectContent>
-                      {classes.map((cls) => (
-                        <SelectItem key={cls.id} value={`${cls.name}-${cls.section}`}>
-                          {cls.name}-{cls.section}
+                      {classNames.map((className) => (
+                        <SelectItem key={className} value={className}>
+                          {className}
                         </SelectItem>
                       ))}
-                      {classes.length === 0 && (
+                      {classNames.length === 0 && (
                         <div className="px-2 py-3 text-sm text-gray-500 text-center">
                           No classes available.
                           <button
@@ -274,14 +284,25 @@ export default function AddStudent() {
                 </div>
                 <div>
                   <Label htmlFor="section">Section *</Label>
-                  <Select value={formData.section} onValueChange={(value: string) => setFormData({ ...formData, section: value })}>
+                  <Select 
+                    value={formData.section} 
+                    onValueChange={(value: string) => setFormData({ ...formData, section: value })}
+                    disabled={!formData.class}
+                  >
                     <SelectTrigger className="h-12 rounded-xl mt-2">
-                      <SelectValue placeholder="Select section" />
+                      <SelectValue placeholder={formData.class ? "Select section" : "Select class first"} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Science">Science</SelectItem>
-                      <SelectItem value="Commerce">Commerce</SelectItem>
-                      <SelectItem value="Arts">Arts</SelectItem>
+                      {sections.map((section) => (
+                        <SelectItem key={section} value={section}>
+                          {section}
+                        </SelectItem>
+                      ))}
+                      {sections.length === 0 && formData.class && (
+                        <div className="px-2 py-3 text-sm text-gray-500 text-center">
+                          No sections available for this class
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

@@ -124,16 +124,31 @@ export const uploadStudentPhoto = async (
   file: File
 ): Promise<string> => {
   try {
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      throw new Error('File size exceeds 5MB limit');
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      throw new Error('File must be an image');
+    }
+
     const fileName = `${studentId}-${Date.now()}`;
     const storageRef = ref(storage, `${PHOTOS_FOLDER}/${fileName}`);
     
+    console.log(`Uploading photo for student ${studentId}...`);
     await uploadBytes(storageRef, file);
+    
+    console.log(`Getting download URL for ${fileName}...`);
     const downloadURL = await getDownloadURL(storageRef);
     
+    console.log(`Photo uploaded successfully: ${downloadURL}`);
     return downloadURL;
   } catch (error) {
     console.error("Error uploading photo:", error);
-    throw error;
+    throw new Error(error instanceof Error ? error.message : 'Failed to upload photo');
   }
 };
 

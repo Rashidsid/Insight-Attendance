@@ -114,6 +114,20 @@ export default function StudentView() {
     }
   };
 
+  // Calculate attendance statistics from recent attendance  
+  const getAttendanceStats = () => {
+    const totalPresent = attendanceRecords.filter(r => r.status === 'Present').length;
+    const totalAbsent = attendanceRecords.filter(r => r.status === 'Absent').length;
+    const totalLate = attendanceRecords.filter(r => r.status === 'Late').length;
+    const totalDays = attendanceRecords.length;
+    return {
+      totalPresent,
+      totalAbsent,
+      totalLate,
+      totalDays
+    };
+  };
+
   const handleStatusChange = async (newStatus: string) => {
     try {
       if (newStatus !== 'Active' && newStatus !== 'Inactive') {
@@ -138,6 +152,7 @@ export default function StudentView() {
   const handleShareReport = async () => {
     setIsSharing(true);
     try {
+      const stats = getAttendanceStats();
       const reportData = {
         ...studentData,
         name: `${studentData.firstName} ${studentData.lastName}`,
@@ -146,10 +161,10 @@ export default function StudentView() {
           overall: `${studentData.attendance}%`,
           thisMonth: `${studentData.attendance}%`,
           lastMonth: `${studentData.attendance - 5}%`,
-          totalPresent: 220,
-          totalAbsent: 18,
-          totalLate: 5,
-          totalDays: 243,
+          totalPresent: stats.totalPresent,
+          totalAbsent: stats.totalAbsent,
+          totalLate: stats.totalLate,
+          totalDays: stats.totalDays,
         }
       };
       generateStudentReport(reportData);
@@ -171,6 +186,7 @@ export default function StudentView() {
   const handleDownloadReport = () => {
     toast.success('Generating attendance report...');
     try {
+      const stats = getAttendanceStats();
       const reportData = {
         ...studentData,
         name: `${studentData.firstName} ${studentData.lastName}`,
@@ -179,10 +195,10 @@ export default function StudentView() {
           overall: `${studentData.attendance}%`,
           thisMonth: `${studentData.attendance}%`,
           lastMonth: `${studentData.attendance - 5}%`,
-          totalPresent: 220,
-          totalAbsent: 18,
-          totalLate: 5,
-          totalDays: 243,
+          totalPresent: stats.totalPresent,
+          totalAbsent: stats.totalAbsent,
+          totalLate: stats.totalLate,
+          totalDays: stats.totalDays,
         }
       };
       const reportHTML = generateStudentReport(reportData);
@@ -339,15 +355,15 @@ export default function StudentView() {
 
               <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-200">
                 <div className="text-center">
-                  <p className="text-2xl text-green-600">220</p>
+                  <p className="text-2xl text-green-600">{getAttendanceStats().totalPresent}</p>
                   <p className="text-xs text-gray-500">Present</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl text-red-600">18</p>
+                  <p className="text-2xl text-red-600">{getAttendanceStats().totalAbsent}</p>
                   <p className="text-xs text-gray-500">Absent</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl text-orange-600">5</p>
+                  <p className="text-2xl text-orange-600">{getAttendanceStats().totalLate}</p>
                   <p className="text-xs text-gray-500">Late</p>
                 </div>
               </div>

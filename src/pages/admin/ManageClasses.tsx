@@ -5,6 +5,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Card } from '../../components/ui/card';
 import { ArrowLeft, Plus, Pencil, Trash2, Save, X } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   Table,
   TableBody,
@@ -23,12 +24,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../../components/ui/alert-dialog';
+import { getAllClasses, addClass, updateClass, deleteClass } from '../../services/classService';
+import type { Class } from '../../services/classService';
 
-interface ClassSection {
-  id: string;
-  name: string;
-  section: string;
-}
+interface ClassSection extends Class {}
 
 export default function ManageClasses() {
   const navigate = useNavigate();
@@ -37,73 +36,89 @@ export default function ManageClasses() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', section: '' });
+  const [loading, setLoading] = useState(true);
 
-  // Load classes from localStorage
+  // Load classes from Firebase
   useEffect(() => {
-    const stored = localStorage.getItem('classes');
-    if (stored) {
-      setClasses(JSON.parse(stored));
-    } else {
-      // Default classes
-      const defaultClasses = [
-        { id: '1', name: '9', section: 'A' },
-        { id: '2', name: '9', section: 'B' },
-        { id: '3', name: '10', section: 'A' },
-        { id: '4', name: '10', section: 'B' },
-        { id: '5', name: '11', section: 'A' },
-        { id: '6', name: '11', section: 'B' },
-        { id: '7', name: '12', section: 'A' },
-        { id: '8', name: '12', section: 'B' },
-      ];
-      setClasses(defaultClasses);
-      localStorage.setItem('classes', JSON.stringify(defaultClasses));
-    }
+    loadClasses();
   }, []);
 
-  // Save to localStorage whenever classes change
-  const saveClasses = (updatedClasses: ClassSection[]) => {
-    setClasses(updatedClasses);
-    localStorage.setItem('classes', JSON.stringify(updatedClasses));
+  const loadClasses = async () => {
+    try {
+      setLoading(true);
+      const data = await getAllClasses();
+      setClasses(data);
+    } catch (error) {
+      console.error('Error loading classes:', error);
+      toast.error('Failed to load classes');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAdd = () => {
-    if (!formData.name.trim() || !formData.section.trim()) return;
+  const handleAdd = async () => {
+    if (!formData.name.trim() || !formData.section.trim()) {
+      toast.error('Please fill in all fields');
+      return;
+    }
 
-    const newClass: ClassSection = {
-      id: Date.now().toString(),
-      name: formData.name.trim(),
-      section: formData.section.trim(),
-    };
-
-    saveClasses([...classes, newClass]);
-    setFormData({ name: '', section: '' });
-    setIsAdding(false);
+    try {
+      await addClass({
+        name: formData.name.trim(),
+        section: formData.section.trim(),
+      });
+      toast.success('Class added successfully');
+      setFormData({ name: '', section: '' });
+      setIsAdding(false);
+      await loadClasses();
+    } catch (error) {
+      console.error('Error adding class:', error);
+      toast.error('Failed to add class');
+    }
   };
 
   const handleEdit = (classItem: ClassSection) => {
-    setEditingId(classItem.id);
-    setFormData({ name: classItem.name, section: classItem.section });
+    if (classItem.id) {
+      setEditingId(classItem.id);
+      setFormData({ name: classItem.name, section: classItem.section });
+    }
   };
 
-  const handleUpdate = () => {
-    if (!formData.name.trim() || !formData.section.trim()) return;
+  const handleUpdate = async () => {
+    if (!formData.name.trim() || !formData.section.trim()) {
+      toast.error('Please fill in all fields');
+      return;
+    }
 
-    const updatedClasses = classes.map((c) =>
-      c.id === editingId
-        ? { ...c, name: formData.name.trim(), section: formData.section.trim() }
-        : c
-    );
+    if (!editingId) return;
 
-    saveClasses(updatedClasses);
-    setEditingId(null);
-    setFormData({ name: '', section: '' });
+    try {
+      await updateClass(editingId, {
+        name: formData.name.trim(),
+        section: formData.section.trim(),
+      });
+      toast.success('Class updated successfully');
+      setEditingId(null);
+      setFormData({ name: '', section: '' });
+      await loadClasses();
+    } catch (error) {
+      console.error('Error updating class:', error);
+      toast.error('Failed to update class');
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteId) return;
-    const updatedClasses = classes.filter((c) => c.id !== deleteId);
-    saveClasses(updatedClasses);
-    setDeleteId(null);
+
+    try {
+      await deleteClass(deleteId);
+      toast.success('Class deleted successfully');
+      setDeleteId(null);
+      await loadClasses();
+    } catch (error) {
+      console.error('Error deleting class:', error);
+      toast.error('Failed to delete class');
+    }
   };
 
   const handleCancel = () => {
@@ -197,7 +212,13 @@ export default function ManageClasses() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {classes.length === 0 ? (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                  Loading classes...
+                </TableCell>
+              </TableRow>
+            ) : classes.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-8 text-gray-500">
                   No classes added yet. Click "Add New Class" to get started.
@@ -227,7 +248,7 @@ export default function ManageClasses() {
                         Edit
                       </Button>
                       <Button
-                        onClick={() => setDeleteId(classItem.id)}
+                        onClick={() => classItem.id && setDeleteId(classItem.id)}
                         variant="outline"
                         size="sm"
                         className="gap-2 rounded-lg text-red-600 hover:text-red-700 hover:bg-red-50"
