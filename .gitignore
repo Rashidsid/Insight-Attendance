@@ -1,9 +1,21 @@
-.node_modules/
+# Dependencies
+node_modules/
 dist/
 build/
+
+# Environment variables
 .env.local
 .env.*.local
+
+# Logs
 *.log
+
+# OS files
 .DS_Store
+
+# IDE
 .vscode/
 .idea/
+
+# Backup files
+*.bak
