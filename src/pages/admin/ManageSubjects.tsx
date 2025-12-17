@@ -5,6 +5,8 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Card } from '../../components/ui/card';
 import { ArrowLeft, Plus, Pencil, Trash2, Save, X, BookOpen } from 'lucide-react';
+import { toast } from 'sonner';
+import { getAllSubjects, addSubject, updateSubject, deleteSubject } from '../../services/classService';
 import {
   Table,
   TableBody,
@@ -25,7 +27,7 @@ import {
 } from '../../components/ui/alert-dialog';
 
 interface Subject {
-  id: string;
+  id?: string;
   name: string;
   code: string;
 }
@@ -36,74 +38,118 @@ export default function ManageSubjects() {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({ name: '', code: '' });
 
-  // Load subjects from localStorage
+  // Load subjects from Firebase
   useEffect(() => {
-    const stored = localStorage.getItem('subjects');
-    if (stored) {
-      setSubjects(JSON.parse(stored));
-    } else {
-      // Default subjects
-      const defaultSubjects = [
-        { id: '1', name: 'Mathematics', code: 'MATH' },
-        { id: '2', name: 'Physics', code: 'PHY' },
-        { id: '3', name: 'Chemistry', code: 'CHEM' },
-        { id: '4', name: 'Biology', code: 'BIO' },
-        { id: '5', name: 'English', code: 'ENG' },
-        { id: '6', name: 'History', code: 'HIST' },
-        { id: '7', name: 'Geography', code: 'GEO' },
-        { id: '8', name: 'Computer Science', code: 'CS' },
-      ];
-      setSubjects(defaultSubjects);
-      localStorage.setItem('subjects', JSON.stringify(defaultSubjects));
-    }
+    loadSubjects();
   }, []);
 
-  // Save to localStorage whenever subjects change
-  const saveSubjects = (updatedSubjects: Subject[]) => {
-    setSubjects(updatedSubjects);
-    localStorage.setItem('subjects', JSON.stringify(updatedSubjects));
+  const loadSubjects = async () => {
+    try {
+      setLoading(true);
+      const data = await getAllSubjects();
+      setSubjects(data);
+      // Also cache in localStorage for quick access in forms
+      localStorage.setItem('subjects', JSON.stringify(data));
+    } catch (error) {
+      console.error('Error loading subjects:', error);
+      // Fallback to localStorage
+      const stored = localStorage.getItem('subjects');
+      if (stored) {
+        setSubjects(JSON.parse(stored));
+      } else {
+        toast.error('Failed to load subjects');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAdd = () => {
-    if (!formData.name.trim() || !formData.code.trim()) return;
+  const handleAdd = async () => {
+    if (!formData.name.trim() || !formData.code.trim()) {
+      toast.error('Please fill in all fields');
+      return;
+    }
 
-    const newSubject: Subject = {
-      id: Date.now().toString(),
-      name: formData.name.trim(),
-      code: formData.code.trim().toUpperCase(),
-    };
+    try {
+      const newSubject: Subject = {
+        name: formData.name.trim(),
+        code: formData.code.trim().toUpperCase(),
+      };
 
-    saveSubjects([...subjects, newSubject]);
-    setFormData({ name: '', code: '' });
-    setIsAdding(false);
+      const id = await addSubject(newSubject);
+      setSubjects([...subjects, { id, ...newSubject }]);
+      
+      // Update localStorage cache
+      localStorage.setItem('subjects', JSON.stringify([...subjects, { id, ...newSubject }]));
+      
+      setFormData({ name: '', code: '' });
+      setIsAdding(false);
+      toast.success('Subject added successfully');
+    } catch (error) {
+      console.error('Error adding subject:', error);
+      toast.error('Failed to add subject');
+    }
   };
 
   const handleEdit = (subject: Subject) => {
-    setEditingId(subject.id);
+    setEditingId(subject.id || null);
     setFormData({ name: subject.name, code: subject.code });
   };
 
-  const handleUpdate = () => {
-    if (!formData.name.trim() || !formData.code.trim()) return;
+  const handleUpdate = async () => {
+    if (!formData.name.trim() || !formData.code.trim()) {
+      toast.error('Please fill in all fields');
+      return;
+    }
 
-    const updatedSubjects = subjects.map((s) =>
-      s.id === editingId
-        ? { ...s, name: formData.name.trim(), code: formData.code.trim().toUpperCase() }
-        : s
-    );
+    if (!editingId) return;
 
-    saveSubjects(updatedSubjects);
-    setEditingId(null);
-    setFormData({ name: '', code: '' });
+    try {
+      await updateSubject(editingId, {
+        name: formData.name.trim(),
+        code: formData.code.trim().toUpperCase(),
+      });
+
+      const updatedSubjects = subjects.map((s) =>
+        s.id === editingId
+          ? { ...s, name: formData.name.trim(), code: formData.code.trim().toUpperCase() }
+          : s
+      );
+
+      setSubjects(updatedSubjects);
+      
+      // Update localStorage cache
+      localStorage.setItem('subjects', JSON.stringify(updatedSubjects));
+      
+      setEditingId(null);
+      setFormData({ name: '', code: '' });
+      toast.success('Subject updated successfully');
+    } catch (error) {
+      console.error('Error updating subject:', error);
+      toast.error('Failed to update subject');
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteId) return;
-    const updatedSubjects = subjects.filter((s) => s.id !== deleteId);
-    saveSubjects(updatedSubjects);
-    setDeleteId(null);
+
+    try {
+      await deleteSubject(deleteId);
+      const updatedSubjects = subjects.filter((s) => s.id !== deleteId);
+      setSubjects(updatedSubjects);
+      
+      // Update localStorage cache
+      localStorage.setItem('subjects', JSON.stringify(updatedSubjects));
+      
+      setDeleteId(null);
+      toast.success('Subject deleted successfully');
+    } catch (error) {
+      console.error('Error deleting subject:', error);
+      toast.error('Failed to delete subject');
+    }
   };
 
   const handleCancel = () => {
@@ -198,7 +244,13 @@ export default function ManageSubjects() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {subjects.length === 0 ? (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center py-8 text-gray-500">
+                  Loading subjects...
+                </TableCell>
+              </TableRow>
+            ) : subjects.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center py-8 text-gray-500">
                   No subjects added yet. Click "Add New Subject" to get started.

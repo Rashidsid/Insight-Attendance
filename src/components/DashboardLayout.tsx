@@ -1,13 +1,14 @@
+import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { Users, UserPlus, GraduationCap, FileText, Camera, ClipboardList, LogOut, Search, Settings } from 'lucide-react';
+import { Users, UserPlus, GraduationCap, FileText, Camera, ClipboardList, LogOut, Search, Settings, User, ChevronDown } from 'lucide-react';
 import { Input } from './ui/input';
-import { Button } from './ui/button';
 import { useSearch } from '../contexts/SearchContext';
 
 export default function DashboardLayout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { searchQuery, setSearchQuery } = useSearch();
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const isAdminRoute = location.pathname.includes('/admin/face-recognition') || location.pathname.includes('/admin/attendance-result') ? false : true;
 
   const adminMenuItems = [
@@ -58,23 +59,7 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
           </nav>
         </div>
 
-        <div className="mt-auto p-6">
-          <Button
-            onClick={() => {
-              // Clear all auth data
-              localStorage.removeItem('isAdminLoggedIn');
-              localStorage.removeItem('adminEmail');
-              localStorage.removeItem('rememberAdmin');
-              // Redirect to login
-              navigate('/admin/login');
-            }}
-            variant="ghost"
-            className="w-full justify-start gap-3 text-gray-700 hover:bg-white/50"
-          >
-            <LogOut className="w-5 h-5" />
-            <span>Logout</span>
-          </Button>
-        </div>
+        <div className="mt-auto p-6 hidden"></div>
       </div>
 
       {/* Main Content */}
@@ -89,6 +74,41 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+          </div>
+
+          {/* Admin Profile Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setIsProfileOpen(!isProfileOpen)}
+              className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-gray-100 transition-colors"
+            >
+              <div className="w-10 h-10 bg-[#A982D9] rounded-full flex items-center justify-center text-white">
+                <User className="w-5 h-5" />
+              </div>
+              <span className="text-gray-700 font-medium">Admin</span>
+              <ChevronDown className="w-4 h-4 text-gray-600" />
+            </button>
+
+            {/* Dropdown Menu */}
+            {isProfileOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
+                <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    // Clear all auth data
+                    localStorage.removeItem('isAdminLoggedIn');
+                    localStorage.removeItem('adminEmail');
+                    localStorage.removeItem('rememberAdmin');
+                    // Redirect to login
+                    navigate('/admin/login');
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  <LogOut className="w-5 h-5" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

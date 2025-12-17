@@ -19,6 +19,7 @@ export interface Student {
   class: string;
   section: string;
   dateOfBirth: string;
+  admissionDate: string;
   gender: string;
   email: string;
   phone: string;

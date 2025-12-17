@@ -226,7 +226,7 @@ export const generateStudentReport = (data: StudentReportData) => {
 <body>
   <div class="report-container">
     <div class="header">
-      <div class="school-name">Smart Attendance Management System</div>
+      <div class="school-name">Insight Attendance System</div>
       <div class="report-title">Student Attendance Report</div>
       <div class="report-date">Generated on: ${new Date().toLocaleDateString()}</div>
     </div>
@@ -268,7 +268,7 @@ export const generateStudentReport = (data: StudentReportData) => {
     </div>
 
     <div class="footer">
-      <p>Smart Attendance Management System © ${new Date().getFullYear()}</p>
+      <p>Insight Attendance System © ${new Date().getFullYear()}</p>
     </div>
   </div>
 </body>

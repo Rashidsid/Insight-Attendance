@@ -18,6 +18,7 @@ const getDefaultStudentData = () => ({
   class: '10-A',
   section: 'Science',
   dateOfBirth: '2008-05-15',
+  admissionDate: '2023-06-01',
   gender: 'Male',
   email: 'ram@example.com',
   phone: '+91 98765 43210',
@@ -41,7 +42,7 @@ export default function StudentView() {
   const [studentData, setStudentData] = useState<StudentData>(getDefaultStudentData());
   const [attendanceRecords, setAttendanceRecords] = useState<Array<{ date: string; status: 'Present' | 'Absent' | 'Late'; time: string }>>([]);
   const [status, setStatus] = useState<'Active' | 'Inactive'>('Active');
-  const [dateRange, setDateRange] = useState('all');
+  const [dateRange, setDateRange] = useState('1month');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
@@ -68,6 +69,7 @@ export default function StudentView() {
             class: student.class,
             section: student.section,
             dateOfBirth: student.dateOfBirth,
+            admissionDate: student.admissionDate || '',
             gender: student.gender,
             email: student.email || '',
             phone: student.phone || '',
@@ -412,8 +414,8 @@ export default function StudentView() {
                   <Calendar className="w-5 h-5 text-orange-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Date of Birth</p>
-                  <p className="text-gray-900">{new Date(studentData.dateOfBirth).toLocaleDateString()}</p>
+                  <p className="text-sm text-gray-500">Admission Date</p>
+                  <p className="text-gray-900">{studentData.admissionDate ? new Date(studentData.admissionDate).toLocaleDateString() : 'N/A'}</p>
                 </div>
               </div>
             </div>
@@ -507,7 +509,6 @@ export default function StudentView() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Time</SelectItem>
                     <SelectItem value="1month">Last 1 Month</SelectItem>
                     <SelectItem value="2months">Last 2 Months</SelectItem>
                     <SelectItem value="3months">Last 3 Months</SelectItem>

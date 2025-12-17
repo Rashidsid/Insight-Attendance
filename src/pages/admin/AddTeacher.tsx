@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { addTeacher } from '../../services/teacherService';
 
 interface Subject {
   id: string;
@@ -18,13 +19,13 @@ export default function AddTeacher() {
   const navigate = useNavigate();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [photoFile, setPhotoFile] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     teacherId: '',
     subject: '',
-    classes: [] as string[],
+    classes: '',
     dateOfBirth: '',
     gender: '',
     email: '',
@@ -33,50 +34,70 @@ export default function AddTeacher() {
     qualification: '',
     experience: '',
     joiningDate: '',
-    photo: '',
   });
 
-  // Load subjects from localStorage
+  // Load subjects from Firestore
   useEffect(() => {
-    const stored = localStorage.getItem('subjects');
-    if (stored) {
-      setSubjects(JSON.parse(stored));
-    } else {
-      // Default subjects if none exist
-      const defaultSubjects = [
-        { id: '1', name: 'Mathematics', code: 'MATH' },
-        { id: '2', name: 'Physics', code: 'PHY' },
-        { id: '3', name: 'Chemistry', code: 'CHEM' },
-        { id: '4', name: 'Biology', code: 'BIO' },
-        { id: '5', name: 'English', code: 'ENG' },
-        { id: '6', name: 'History', code: 'HIST' },
-        { id: '7', name: 'Geography', code: 'GEO' },
-        { id: '8', name: 'Computer Science', code: 'CS' },
-      ];
-      setSubjects(defaultSubjects);
-    }
+    loadSubjects();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const loadSubjects = async () => {
+    try {
+      const stored = localStorage.getItem('subjects');
+      if (stored) {
+        setSubjects(JSON.parse(stored));
+      } else {
+        // Default subjects if none exist
+        const defaultSubjects = [
+          { id: '1', name: 'Mathematics', code: 'MATH' },
+          { id: '2', name: 'Physics', code: 'PHY' },
+          { id: '3', name: 'Chemistry', code: 'CHEM' },
+          { id: '4', name: 'Biology', code: 'BIO' },
+          { id: '5', name: 'English', code: 'ENG' },
+          { id: '6', name: 'History', code: 'HIST' },
+          { id: '7', name: 'Geography', code: 'GEO' },
+          { id: '8', name: 'Computer Science', code: 'CS' },
+        ];
+        setSubjects(defaultSubjects);
+      }
+    } catch (error) {
+      console.error('Error loading subjects:', error);
+      toast.error('Failed to load subjects');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Get existing teachers from localStorage
-    const existingTeachers = JSON.parse(localStorage.getItem('teacherDetails') || '[]');
-    
-    // Create new teacher object with all form data
-    const newTeacher = {
-      id: Math.max(...existingTeachers.map((t: any) => t.id || 0), 0) + 1,
-      ...formData,
-      status: 'Active',
-      photo: photoFile,
-    };
-    
-    // Add to teachers list
-    existingTeachers.push(newTeacher);
-    localStorage.setItem('teacherDetails', JSON.stringify(existingTeachers));
-    
-    toast.success('Teacher added successfully!');
-    navigate('/admin/teachers');
+    // Validate required fields
+    if (!formData.firstName.trim() || !formData.lastName.trim() || !formData.teacherId.trim() || 
+        !formData.subject.trim() || !formData.email.trim() || !formData.phone.trim()) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Create teacher object with base64 photo (stored directly in Firestore like students)
+      const newTeacher = {
+        ...formData,
+        status: 'Active' as const,
+        photo: photoPreview || null,
+      };
+
+      // Add to Firebase
+      await addTeacher(newTeacher);
+      
+      toast.success('Teacher added successfully!');
+      navigate('/admin/teachers');
+    } catch (error) {
+      console.error('Error adding teacher:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to add teacher: ${errorMsg}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,14 +115,12 @@ export default function AddTeacher() {
         return;
       }
       
-      // Read file as base64
+      // Create base64 and store directly
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64String = event.target?.result as string;
         setPhotoPreview(base64String);
-        setPhotoFile(base64String);
-        setFormData({ ...formData, photo: base64String });
-        toast.success('Photo uploaded successfully!');
+        toast.success('Photo selected successfully!');
       };
       reader.readAsDataURL(file);
     }
@@ -149,29 +168,29 @@ export default function AddTeacher() {
                   className="hidden"
                   id="photo-upload"
                 />
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-xl gap-2"
+                onClick={() => document.getElementById('photo-upload')?.click()}
+                disabled={loading}
+              >
+                <Upload className="w-4 h-4" />
+                {photoPreview ? 'Change Photo' : 'Upload Photo'}
+              </Button>
+              {photoPreview && (
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full rounded-xl gap-2"
-                  onClick={() => document.getElementById('photo-upload')?.click()}
+                  className="w-full rounded-xl text-red-600 hover:text-red-700"
+                  onClick={() => {
+                    setPhotoPreview(null);
+                  }}
+                  disabled={loading}
                 >
-                  <Upload className="w-4 h-4" />
-                  {photoPreview ? 'Change Photo' : 'Upload Photo'}
+                  Remove Photo
                 </Button>
-                {photoPreview && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full rounded-xl text-red-600 hover:text-red-700"
-                    onClick={() => {
-                      setPhotoPreview(null);
-                      setPhotoFile(null);
-                      setFormData({ ...formData, photo: '' });
-                    }}
-                  >
-                    Remove Photo
-                  </Button>
-                )}
+              )}
               </div>
             </div>
           </div>
@@ -358,14 +377,16 @@ export default function AddTeacher() {
                 variant="outline"
                 className="flex-1 h-12 rounded-xl"
                 onClick={() => navigate('/admin/teachers')}
+                disabled={loading}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
+                disabled={loading}
                 className="flex-1 h-12 rounded-xl bg-[#A982D9] hover:bg-[#9770C8]"
               >
-                Add Teacher
+                {loading ? 'Adding Teacher...' : 'Add Teacher'}
               </Button>
             </div>
           </div>

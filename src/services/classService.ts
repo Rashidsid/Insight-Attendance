@@ -16,12 +16,21 @@ export interface Class {
   updatedAt?: Date;
 }
 
-const COLLECTION_NAME = "classes";
+export interface Subject {
+  id?: string;
+  name: string;
+  code: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const CLASSES_COLLECTION = "classes";
+const SUBJECTS_COLLECTION = "subjects";
 
 // Get all classes
 export const getAllClasses = async (): Promise<Class[]> => {
   try {
-    const querySnapshot = await getDocs(collection(db, COLLECTION_NAME));
+    const querySnapshot = await getDocs(collection(db, CLASSES_COLLECTION));
     return querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
@@ -35,7 +44,7 @@ export const getAllClasses = async (): Promise<Class[]> => {
 // Add new class
 export const addClass = async (classData: Class): Promise<string> => {
   try {
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+    const docRef = await addDoc(collection(db, CLASSES_COLLECTION), {
       ...classData,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -53,7 +62,7 @@ export const updateClass = async (
   classData: Partial<Class>
 ): Promise<void> => {
   try {
-    await updateDoc(doc(db, COLLECTION_NAME, classId), {
+    await updateDoc(doc(db, CLASSES_COLLECTION, classId), {
       ...classData,
       updatedAt: new Date(),
     });
@@ -66,7 +75,7 @@ export const updateClass = async (
 // Delete class
 export const deleteClass = async (classId: string): Promise<void> => {
   try {
-    await deleteDoc(doc(db, COLLECTION_NAME, classId));
+    await deleteDoc(doc(db, CLASSES_COLLECTION, classId));
   } catch (error) {
     console.error("Error deleting class:", error);
     throw error;
@@ -95,6 +104,63 @@ export const getSectionsForClass = async (className: string): Promise<string[]> 
     return [...new Set(sections)].sort();
   } catch (error) {
     console.error("Error fetching sections:", error);
+    throw error;
+  }
+};
+
+// ===== SUBJECT MANAGEMENT =====
+
+// Get all subjects
+export const getAllSubjects = async (): Promise<Subject[]> => {
+  try {
+    const querySnapshot = await getDocs(collection(db, SUBJECTS_COLLECTION));
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Subject[];
+  } catch (error) {
+    console.error("Error fetching subjects:", error);
+    throw error;
+  }
+};
+
+// Add new subject
+export const addSubject = async (subjectData: Subject): Promise<string> => {
+  try {
+    const docRef = await addDoc(collection(db, SUBJECTS_COLLECTION), {
+      ...subjectData,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error("Error adding subject:", error);
+    throw error;
+  }
+};
+
+// Update subject
+export const updateSubject = async (
+  subjectId: string,
+  subjectData: Partial<Subject>
+): Promise<void> => {
+  try {
+    await updateDoc(doc(db, SUBJECTS_COLLECTION, subjectId), {
+      ...subjectData,
+      updatedAt: new Date(),
+    });
+  } catch (error) {
+    console.error("Error updating subject:", error);
+    throw error;
+  }
+};
+
+// Delete subject
+export const deleteSubject = async (subjectId: string): Promise<void> => {
+  try {
+    await deleteDoc(doc(db, SUBJECTS_COLLECTION, subjectId));
+  } catch (error) {
+    console.error("Error deleting subject:", error);
     throw error;
   }
 };

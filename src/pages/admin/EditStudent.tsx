@@ -25,6 +25,7 @@ export default function EditStudent() {
     class: '',
     section: '',
     dateOfBirth: '',
+    admissionDate: '',
     gender: '',
     email: '',
     phone: '',
@@ -48,6 +49,7 @@ export default function EditStudent() {
             class: student.class,
             section: student.section,
             dateOfBirth: student.dateOfBirth,
+            admissionDate: student.admissionDate || '',
             gender: student.gender,
             email: student.email || '',
             phone: student.phone || '',
@@ -279,6 +281,17 @@ export default function EditStudent() {
                     className="h-12 rounded-xl mt-2"
                     value={formData.dateOfBirth}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="admissionDate">Admission Date *</Label>
+                  <Input
+                    id="admissionDate"
+                    type="date"
+                    className="h-12 rounded-xl mt-2"
+                    value={formData.admissionDate}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, admissionDate: e.target.value })}
                     required
                   />
                 </div>

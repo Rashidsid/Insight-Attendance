@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { getTeacherById, updateTeacher } from '../../services/teacherService';
 
 interface Subject {
   id: string;
@@ -14,40 +15,18 @@ interface Subject {
   code: string;
 }
 
-// Mock teacher data - in real app, this would come from API/database
-const getTeacherData = (teacherId: number) => {
-  // Try to get from localStorage first
-  const stored = localStorage.getItem('teacherDetails');
-  if (stored) {
-    const allTeachers = JSON.parse(stored);
-    const found = allTeachers.find((t: any) => t.id === teacherId);
-    if (found) return found;
-  }
-  
-  // Fallback to mock data
-  const mockTeachers = [
-    { id: 1, firstName: 'Ram', lastName: 'Kumar', teacherId: 'TCH001', subject: 'Mathematics', dateOfBirth: '1980-05-15', gender: 'Male', email: 'ram.kumar@example.com', phone: '+91 98765 43210', address: '123 Main St, City', qualification: 'M.Sc. in Mathematics', experience: '15', joiningDate: '2010-08-01' },
-    { id: 2, firstName: 'Shyam', lastName: 'Singh', teacherId: 'TCH002', subject: 'Physics', dateOfBirth: '1985-08-22', gender: 'Male', email: 'shyam.singh@example.com', phone: '+91 98765 43211', address: '456 Oak Ave, Town', qualification: 'M.Sc. in Physics', experience: '12', joiningDate: '2012-09-01' },
-    { id: 3, firstName: 'Farhan', lastName: 'Ahmed', teacherId: 'TCH003', subject: 'English', dateOfBirth: '1990-03-10', gender: 'Male', email: 'farhan.ahmed@example.com', phone: '+91 98765 43212', address: '789 Elm St, Village', qualification: 'M.A. in English', experience: '8', joiningDate: '2016-07-01' },
-    { id: 4, firstName: 'Shoaib', lastName: 'Khan', teacherId: 'TCH004', subject: 'Chemistry', dateOfBirth: '1982-12-18', gender: 'Male', email: 'shoaib.khan@example.com', phone: '+91 98765 43213', address: '234 Birch Ave, City', qualification: 'M.Sc. in Chemistry', experience: '10', joiningDate: '2014-08-15' },
-    { id: 5, firstName: 'Saif', lastName: 'Ali', teacherId: 'TCH005', subject: 'Biology', dateOfBirth: '1978-06-25', gender: 'Male', email: 'saif.ali@example.com', phone: '+91 98765 43214', address: '345 Oak St, Town', qualification: 'M.Sc. in Biology', experience: '14', joiningDate: '2011-09-01' },
-    { id: 6, firstName: 'Siddiqui', lastName: 'Hassan', teacherId: 'TCH006', subject: 'History', dateOfBirth: '1992-09-08', gender: 'Male', email: 'siddiqui.hassan@example.com', phone: '+91 98765 43215', address: '456 Maple Dr, Village', qualification: 'M.A. in History', experience: '6', joiningDate: '2018-07-01' },
-  ];
-  
-  return mockTeachers.find(t => t.id === teacherId);
-};
-
 export default function EditTeacher() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     teacherId: '',
     subject: '',
-    classes: [] as string[],
+    classes: '',
     dateOfBirth: '',
     gender: '',
     email: '',
@@ -56,24 +35,42 @@ export default function EditTeacher() {
     qualification: '',
     experience: '',
     joiningDate: '',
-    photo: '',
   });
 
-  // Load teacher data
+  // Load teacher data from Firebase
   useEffect(() => {
-    const teacherId = parseInt(id || '0');
-    const teacher = getTeacherData(teacherId);
-    if (teacher) {
-      setFormData({
-        ...teacher,
-        classes: [],
-        password: '', // Don't show actual password
-        photo: teacher.photo || '',
-      });
-      if (teacher.photo) {
-        setPhotoPreview(teacher.photo);
+    const loadTeacher = async () => {
+      try {
+        if (id) {
+          const teacher = await getTeacherById(id);
+          if (teacher) {
+            setFormData({
+              firstName: teacher.firstName,
+              lastName: teacher.lastName,
+              teacherId: teacher.teacherId,
+              subject: teacher.subject,
+              classes: teacher.classes || '',
+              dateOfBirth: teacher.dateOfBirth,
+              gender: teacher.gender,
+              email: teacher.email,
+              phone: teacher.phone,
+              address: teacher.address,
+              qualification: teacher.qualification,
+              experience: teacher.experience,
+              joiningDate: teacher.joiningDate,
+            });
+            if (teacher.photo) {
+              setPhotoPreview(teacher.photo);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading teacher:', error);
+        toast.error('Failed to load teacher data');
       }
-    }
+    };
+
+    loadTeacher();
   }, [id]);
 
   // Load subjects from localStorage
@@ -97,43 +94,36 @@ export default function EditTeacher() {
     }
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Save updated teacher data to localStorage
-    const teacherId = parseInt(id || '0');
-    const storedDetails = localStorage.getItem('teacherDetails');
-    
-    if (storedDetails) {
-      const allTeachers = JSON.parse(storedDetails);
-      const updatedTeachers = allTeachers.map((teacher: any) => {
-        if (teacher.id === teacherId) {
-          return {
-            ...teacher,
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            teacherId: formData.teacherId,
-            subject: formData.subject,
-            dateOfBirth: formData.dateOfBirth,
-            gender: formData.gender,
-            email: formData.email,
-            phone: formData.phone,
-            address: formData.address,
-            qualification: formData.qualification,
-            experience: formData.experience,
-            joiningDate: formData.joiningDate,
-            photo: formData.photo,
-          };
-        }
-        return teacher;
-      });
-      
-      localStorage.setItem('teacherDetails', JSON.stringify(updatedTeachers));
+
+    // Validate required fields
+    if (!formData.firstName.trim() || !formData.lastName.trim() || !formData.teacherId.trim() || 
+        !formData.subject.trim() || !formData.email.trim() || !formData.phone.trim()) {
+      toast.error('Please fill in all required fields');
+      return;
     }
-    
-    toast.success('Teacher updated successfully!');
-    // Navigate back to teacher list
-    navigate('/admin/teachers');
+
+    try {
+      setLoading(true);
+
+      // Update teacher data in Firebase with base64 photo directly (like students)
+      if (id) {
+        await updateTeacher(id, {
+          ...formData,
+          photo: photoPreview || null,
+        });
+        
+        toast.success('Teacher updated successfully!');
+        navigate('/admin/teachers');
+      }
+    } catch (error) {
+      console.error('Error updating teacher:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to update teacher: ${errorMsg}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -151,13 +141,12 @@ export default function EditTeacher() {
         return;
       }
       
-      // Read file as base64
+      // Create base64 and store directly
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64String = event.target?.result as string;
         setPhotoPreview(base64String);
-        setFormData({ ...formData, photo: base64String });
-        toast.success('Photo uploaded successfully!');
+        toast.success('Photo selected successfully!');
       };
       reader.readAsDataURL(file);
     }
@@ -210,6 +199,7 @@ export default function EditTeacher() {
                   variant="outline"
                   className="w-full rounded-xl gap-2"
                   onClick={() => document.getElementById('photo-upload')?.click()}
+                  disabled={loading}
                 >
                   <Upload className="w-4 h-4" />
                   {photoPreview ? 'Change Photo' : 'Upload Photo'}
@@ -221,8 +211,8 @@ export default function EditTeacher() {
                     className="w-full rounded-xl text-red-600 hover:text-red-700"
                     onClick={() => {
                       setPhotoPreview(null);
-                      setFormData({ ...formData, photo: '' });
                     }}
+                    disabled={loading}
                   >
                     Remove Photo
                   </Button>
@@ -413,14 +403,16 @@ export default function EditTeacher() {
                 variant="outline"
                 className="flex-1 h-12 rounded-xl"
                 onClick={() => navigate('/admin/teachers')}
+                disabled={loading}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
+                disabled={loading}
                 className="flex-1 h-12 rounded-xl bg-[#A982D9] hover:bg-[#9770C8]"
               >
-                Update Teacher
+                {loading ? 'Updating Teacher...' : 'Update Teacher'}
               </Button>
             </div>
           </div>

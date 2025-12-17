@@ -7,8 +7,7 @@ import {
   deleteDoc,
   doc,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../config/firebase";
+import { db } from "../config/firebase";
 
 // Interfaces
 export interface Teacher {
@@ -36,10 +35,10 @@ export interface Teacher {
 export interface AttendanceRecord {
   date: string;
   status: "Present" | "Absent" | "Late";
+  time?: string;
 }
 
 const COLLECTION_NAME = "teachers";
-const PHOTOS_FOLDER = "teacher-photos";
 
 // Get all teachers
 export const getAllTeachers = async (): Promise<Teacher[]> => {
@@ -109,25 +108,6 @@ export const deleteTeacher = async (teacherId: string): Promise<void> => {
     await deleteDoc(doc(db, COLLECTION_NAME, teacherId));
   } catch (error) {
     console.error("Error deleting teacher:", error);
-    throw error;
-  }
-};
-
-// Upload teacher photo
-export const uploadTeacherPhoto = async (
-  teacherId: string,
-  file: File
-): Promise<string> => {
-  try {
-    const fileName = `${teacherId}-${Date.now()}`;
-    const storageRef = ref(storage, `${PHOTOS_FOLDER}/${fileName}`);
-    
-    await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(storageRef);
-    
-    return downloadURL;
-  } catch (error) {
-    console.error("Error uploading photo:", error);
     throw error;
   }
 };
