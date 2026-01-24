@@ -31,18 +31,22 @@ export default function HomePage() {
   useEffect(() => {
     const initModels = async () => {
       try {
-        console.log('Loading face-api models...');
+        console.log('Initializing face recognition...');
         await loadFaceApiModels();
-        console.log('Face-api models loaded successfully');
+        console.log('✓ Face-api models loaded successfully');
       } catch (err) {
         console.error('Failed to load models:', err);
-        setError('Failed to load face recognition models. Please refresh the page.');
+        setError(err instanceof Error ? err.message : 'Failed to load face recognition models');
       }
     };
     
-    initModels();
+    // Wait a bit for the CDN script to load
+    const timer = setTimeout(() => {
+      initModels();
+    }, 1000);
     
     return () => {
+      clearTimeout(timer);
       stopCamera();
     };
   }, []);
@@ -86,7 +90,7 @@ export default function HomePage() {
     }
   };
 
-  const startFaceDetection = async () => {
+  const startFaceDetection = () => {
     if (!videoRef.current) return;
     
     // Use face-api for real face detection
@@ -96,32 +100,32 @@ export default function HomePage() {
       try {
         // Check if face-api is loaded globally
         if (typeof (window as any).faceapi === 'undefined') {
-          console.warn('Face-API library not ready yet');
           return;
         }
         
         const faceapi = (window as any).faceapi;
         
-        // Make sure models are loaded
-        if (!faceapi.nets || !faceapi.nets.tinyFaceDetector) {
-          console.warn('Face-API models not loaded yet');
+        // Check if models are loaded
+        if (!faceapi.nets || !faceapi.nets.tinyFaceDetector || !faceapi.nets.tinyFaceDetector.params) {
           return;
         }
         
-        const detections = await faceapi.detectSingleFace(
+        // Detect faces
+        const detections = await faceapi.detectAllFaces(
           videoRef.current,
           new faceapi.TinyFaceDetectorOptions()
         );
         
-        setFaceDetected(!!detections);
+        // Set face detected if we found at least one face
+        setFaceDetected(detections && detections.length > 0);
       } catch (err) {
         // Silently handle errors during detection loop
         setFaceDetected(false);
       }
     };
 
-    // Check for faces every 300ms
-    const interval = setInterval(detectFaces, 300);
+    // Check for faces every 500ms
+    const interval = setInterval(detectFaces, 500);
     
     // Clean up on camera stop
     return () => clearInterval(interval);
@@ -153,6 +157,12 @@ export default function HomePage() {
     setError(null);
 
     try {
+      // Make sure models are loaded before trying to recognize
+      const faceapi = (window as any).faceapi;
+      if (!faceapi || !faceapi.nets || !faceapi.nets.tinyFaceDetector || !faceapi.nets.tinyFaceDetector.params) {
+        throw new Error('Face-API models are still loading. Please wait a moment and try again.');
+      }
+
       const result = await recognizeFaceFromVideo(videoRef.current);
       
       if (result) {

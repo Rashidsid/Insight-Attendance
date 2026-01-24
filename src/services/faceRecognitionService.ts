@@ -24,7 +24,10 @@ const MIN_CONFIDENCE_THRESHOLD = 0.6;
 let modelsLoaded = false;
 
 export const loadFaceApiModels = async () => {
-  if (modelsLoaded) return;
+  if (modelsLoaded) {
+    console.log("Models already loaded");
+    return;
+  }
   
   try {
     // Get the global faceapi object from CDN
@@ -36,17 +39,17 @@ export const loadFaceApiModels = async () => {
 
     console.log("Starting to load face-api models...");
     
-    // Use the correct CDN URL for models
-    const CDN_URLS = [
+    // Try different CDN URLs for the weights
+    const modelUrls = [
       "https://unpkg.com/face-api.js@0.22.2/weights",
       "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights",
-      "/models" // Local fallback
+      "https://unpkg.com/face-api.js/weights",
     ];
 
-    let modelsLoaded = false;
+    let loadedSuccessfully = false;
     let lastError: any = null;
 
-    for (const url of CDN_URLS) {
+    for (const url of modelUrls) {
       try {
         console.log(`Attempting to load models from: ${url}`);
         
@@ -54,11 +57,10 @@ export const loadFaceApiModels = async () => {
           faceapiGlobal.nets.tinyFaceDetector.loadFromUri(url),
           faceapiGlobal.nets.faceLandmark68Net.loadFromUri(url),
           faceapiGlobal.nets.faceRecognitionNet.loadFromUri(url),
-          faceapiGlobal.nets.faceExpressionNet.loadFromUri(url),
         ]);
         
         console.log(`✓ Face-API models loaded successfully from: ${url}`);
-        modelsLoaded = true;
+        loadedSuccessfully = true;
         break;
       } catch (err) {
         lastError = err;
@@ -67,14 +69,16 @@ export const loadFaceApiModels = async () => {
       }
     }
 
-    if (!modelsLoaded) {
-      throw new Error(`Failed to load models from all sources. Last error: ${lastError?.message}`);
+    if (!loadedSuccessfully) {
+      throw new Error(`Failed to load models from all sources. Last error: ${lastError?.message || lastError}`);
     }
     
+    // Set the module-level flag AFTER successful loading
     modelsLoaded = true;
-    console.log("Face-API models initialized successfully");
+    console.log("✓ Face-API models initialized successfully");
   } catch (error) {
     console.error("Error loading face-api models:", error);
+    modelsLoaded = false;
     throw new Error("Failed to load face recognition models. Please refresh and check console for details.");
   }
 };
