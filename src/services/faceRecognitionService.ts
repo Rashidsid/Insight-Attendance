@@ -1,6 +1,5 @@
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../config/firebase";
-import * as faceapi from "face-api.js";
 
 export interface RecognitionResult {
   id: string;
@@ -28,36 +27,55 @@ export const loadFaceApiModels = async () => {
   if (modelsLoaded) return;
   
   try {
-    // Try local models first, fall back to CDN
-    const MODEL_URL = "/models";
+    // Get the global faceapi object from CDN
+    const faceapiGlobal = (window as any).faceapi;
     
-    try {
-      // Try loading from local public/models folder
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-        faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
-      ]);
-      console.log("Face-API models loaded from local folder");
-    } catch (localError) {
-      // Fallback to CDN
-      console.log("Loading models from CDN instead...");
-      const CDN_URL = "https://unpkg.com/face-api.js@0.22.2/weights";
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(CDN_URL),
-        faceapi.nets.faceLandmark68Net.loadFromUri(CDN_URL),
-        faceapi.nets.faceRecognitionNet.loadFromUri(CDN_URL),
-        faceapi.nets.faceExpressionNet.loadFromUri(CDN_URL),
-      ]);
-      console.log("Face-API models loaded from CDN");
+    if (!faceapiGlobal) {
+      throw new Error("Face-API library not loaded. Check if CDN script loaded correctly.");
+    }
+
+    console.log("Starting to load face-api models...");
+    
+    // Use the correct CDN URL for models
+    const CDN_URLS = [
+      "https://unpkg.com/face-api.js@0.22.2/weights",
+      "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights",
+      "/models" // Local fallback
+    ];
+
+    let modelsLoaded = false;
+    let lastError: any = null;
+
+    for (const url of CDN_URLS) {
+      try {
+        console.log(`Attempting to load models from: ${url}`);
+        
+        await Promise.all([
+          faceapiGlobal.nets.tinyFaceDetector.loadFromUri(url),
+          faceapiGlobal.nets.faceLandmark68Net.loadFromUri(url),
+          faceapiGlobal.nets.faceRecognitionNet.loadFromUri(url),
+          faceapiGlobal.nets.faceExpressionNet.loadFromUri(url),
+        ]);
+        
+        console.log(`✓ Face-API models loaded successfully from: ${url}`);
+        modelsLoaded = true;
+        break;
+      } catch (err) {
+        lastError = err;
+        console.warn(`✗ Failed to load from ${url}:`, err);
+        continue;
+      }
+    }
+
+    if (!modelsLoaded) {
+      throw new Error(`Failed to load models from all sources. Last error: ${lastError?.message}`);
     }
     
     modelsLoaded = true;
-    console.log("Face-API models loaded successfully");
+    console.log("Face-API models initialized successfully");
   } catch (error) {
     console.error("Error loading face-api models:", error);
-    throw new Error("Failed to load face recognition models. Please check browser console.");
+    throw new Error("Failed to load face recognition models. Please refresh and check console for details.");
   }
 };
 
@@ -66,8 +84,14 @@ export const captureFaceDescriptor = async (
   videoElement: HTMLVideoElement
 ): Promise<Float32Array | null> => {
   try {
-    const detections = await faceapi
-      .detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
+    const faceapiGlobal = (window as any).faceapi;
+    if (!faceapiGlobal) {
+      console.error("Face-API not available");
+      return null;
+    }
+
+    const detections = await faceapiGlobal
+      .detectSingleFace(videoElement, new faceapiGlobal.TinyFaceDetectorOptions())
       .withFaceLandmarks()
       .withFaceDescriptor();
 
@@ -121,24 +145,38 @@ export const getFaceDescriptorFromUrl = async (
   imageUrl: string
 ): Promise<Float32Array | null> => {
   try {
+    const faceapiGlobal = (window as any).faceapi;
+    if (!faceapiGlobal) {
+      console.error("Face-API not available");
+      return null;
+    }
+
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.src = imageUrl;
 
     return new Promise((resolve) => {
       img.onload = async () => {
-        const detections = await faceapi
-          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
-          .withFaceLandmarks()
-          .withFaceDescriptor();
+        try {
+          const detections = await faceapiGlobal
+            .detectSingleFace(img, new faceapiGlobal.TinyFaceDetectorOptions())
+            .withFaceLandmarks()
+            .withFaceDescriptor();
 
-        if (!detections) {
+          if (!detections) {
+            resolve(null);
+          } else {
+            resolve(detections.descriptor);
+          }
+        } catch (err) {
+          console.error("Error extracting face descriptor from image:", err);
           resolve(null);
-        } else {
-          resolve(detections.descriptor);
         }
       };
-      img.onerror = () => resolve(null);
+      img.onerror = () => {
+        console.error(`Failed to load image: ${imageUrl}`);
+        resolve(null);
+      };
     });
   } catch (error) {
     console.error("Error getting face descriptor from URL:", error);
