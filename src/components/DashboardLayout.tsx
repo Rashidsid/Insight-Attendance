@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { Users, UserPlus, GraduationCap, FileText, Camera, ClipboardList, LogOut, Search, Settings, User, ChevronDown } from 'lucide-react';
-import { Input } from './ui/input';
+import { Users, UserPlus, GraduationCap, FileText, Camera, ClipboardList, LogOut, Settings, User, ChevronDown } from 'lucide-react';
 import { useSearch } from '../contexts/SearchContext';
+import GlobalSearchBar from './GlobalSearchBar';
 
 export default function DashboardLayout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
@@ -66,14 +66,8 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
       <div className="flex-1 flex flex-col">
         {/* Top Bar */}
         <div className="h-[90px] bg-white border-b border-gray-200 px-8 flex items-center justify-between">
-          <div className="relative w-[600px]">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <Input
-              placeholder="Search students, teachers, or records..."
-              className="h-12 pl-12 rounded-xl border-gray-300"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div className="w-[600px]">
+            <GlobalSearchBar value={searchQuery} onChange={setSearchQuery} />
           </div>
 
           {/* Admin Profile Dropdown */}
