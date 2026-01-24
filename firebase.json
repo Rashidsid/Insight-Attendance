@@ -1,0 +1,17 @@
+{
+  "projects": {
+    "default": "YOUR_FIREBASE_PROJECT_ID"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ]
+    }
+  ]
+}
