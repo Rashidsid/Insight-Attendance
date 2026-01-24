@@ -28,18 +28,36 @@ export const loadFaceApiModels = async () => {
   if (modelsLoaded) return;
   
   try {
-    const MODEL_URL = "/models"; // Ensure face-api models are in public/models folder
-    await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-      faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
-    ]);
+    // Try local models first, fall back to CDN
+    const MODEL_URL = "/models";
+    
+    try {
+      // Try loading from local public/models folder
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+        faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+      ]);
+      console.log("Face-API models loaded from local folder");
+    } catch (localError) {
+      // Fallback to CDN
+      console.log("Loading models from CDN instead...");
+      const CDN_URL = "https://unpkg.com/face-api.js@0.22.2/weights";
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(CDN_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(CDN_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(CDN_URL),
+        faceapi.nets.faceExpressionNet.loadFromUri(CDN_URL),
+      ]);
+      console.log("Face-API models loaded from CDN");
+    }
+    
     modelsLoaded = true;
     console.log("Face-API models loaded successfully");
   } catch (error) {
     console.error("Error loading face-api models:", error);
-    throw new Error("Failed to load face recognition models");
+    throw new Error("Failed to load face recognition models. Please check browser console.");
   }
 };
 

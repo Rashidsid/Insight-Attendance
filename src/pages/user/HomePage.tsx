@@ -31,9 +31,12 @@ export default function HomePage() {
   useEffect(() => {
     const initModels = async () => {
       try {
+        console.log('Loading face-api models...');
         await loadFaceApiModels();
+        console.log('Face-api models loaded successfully');
       } catch (err) {
         console.error('Failed to load models:', err);
+        setError('Failed to load face recognition models. Please refresh the page.');
       }
     };
     
@@ -91,8 +94,19 @@ export default function HomePage() {
       if (!videoRef.current) return;
       
       try {
+        // Check if face-api is loaded globally
+        if (typeof (window as any).faceapi === 'undefined') {
+          console.warn('Face-API library not ready yet');
+          return;
+        }
+        
         const faceapi = (window as any).faceapi;
-        if (!faceapi) return;
+        
+        // Make sure models are loaded
+        if (!faceapi.nets || !faceapi.nets.tinyFaceDetector) {
+          console.warn('Face-API models not loaded yet');
+          return;
+        }
         
         const detections = await faceapi.detectSingleFace(
           videoRef.current,
@@ -101,7 +115,7 @@ export default function HomePage() {
         
         setFaceDetected(!!detections);
       } catch (err) {
-        console.error('Face detection error:', err);
+        // Silently handle errors during detection loop
         setFaceDetected(false);
       }
     };
