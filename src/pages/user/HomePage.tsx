@@ -1,11 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
 import { Camera, UserCircle, AlertCircle, CheckCircle } from 'lucide-react';
+import { recognizeFaceFromVideo, loadFaceApiModels } from '../../services/faceRecognitionService';
 
 interface RecognitionResult {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
+  rollNo: string;
+  email: string;
+  class: string;
+  section: string;
   role: 'student' | 'teacher';
+  photo?: string;
   matched: boolean;
+  confidence: number;
   timestamp?: string;
 }
 
@@ -15,17 +23,36 @@ export default function HomePage() {
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modelsLoading, setModelsLoading] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Load face-api models on component mount
+  useEffect(() => {
+    const initModels = async () => {
+      try {
+        setModelsLoading(true);
+        await loadFaceApiModels();
+        setModelsLoading(false);
+      } catch (err) {
+        console.error('Failed to load models:', err);
+        setModelsLoading(false);
+      }
+    };
+    
+    initModels();
+    
+    return () => {
+      stopCamera();
+    };
+  }, []);
 
   const activateCamera = async () => {
     try {
       setError(null);
-      setCameraActive(true); // Set active immediately to show video element
+      setCameraActive(true);
       
-      // Request camera access
       const constraints = {
         video: {
           facingMode: 'user',
@@ -38,11 +65,9 @@ export default function HomePage() {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
       if (videoRef.current) {
-        // Set srcObject to stream
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         
-        // Play the video
         const playPromise = videoRef.current.play();
         if (playPromise !== undefined) {
           playPromise.catch(err => {
@@ -51,8 +76,8 @@ export default function HomePage() {
           });
         }
 
-        // Start face detection
-        setTimeout(() => startFaceDetection(), 1000);
+        // Start face detection after video is ready
+        setTimeout(() => startFaceDetection(), 500);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Camera access denied or not available';
@@ -62,27 +87,37 @@ export default function HomePage() {
     }
   };
 
-  const startFaceDetection = () => {
-    if (detectionIntervalRef.current) {
-      clearInterval(detectionIntervalRef.current);
-    }
+  const startFaceDetection = async () => {
+    if (!videoRef.current) return;
+    
+    // Use face-api for real face detection
+    const detectFaces = async () => {
+      if (!videoRef.current) return;
+      
+      try {
+        const detections = await (window as any).faceapi?.detectSingleFace(
+          videoRef.current,
+          new (window as any).faceapi?.TinyFaceDetectorOptions?.()
+        );
+        
+        setFaceDetected(!!detections);
+      } catch (err) {
+        console.error('Face detection error:', err);
+        setFaceDetected(false);
+      }
+    };
 
-    // Simulate continuous face detection (90% detection rate)
-    detectionIntervalRef.current = setInterval(() => {
-      const detected = Math.random() > 0.1;
-      setFaceDetected(detected);
-    }, 500);
+    // Check for faces every 300ms
+    const interval = setInterval(detectFaces, 300);
+    
+    // Clean up on camera stop
+    return () => clearInterval(interval);
   };
 
   const stopCamera = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
-    }
-
-    if (detectionIntervalRef.current) {
-      clearInterval(detectionIntervalRef.current);
-      detectionIntervalRef.current = null;
     }
 
     setCameraActive(false);
@@ -96,54 +131,35 @@ export default function HomePage() {
       return;
     }
 
+    if (!videoRef.current) {
+      setError('Video element not ready');
+      return;
+    }
+
     setIsRecognizing(true);
     setError(null);
 
     try {
-      // TODO: Replace with actual backend API call
-      // const response = await fetch('/api/recognize-face', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ /* capture frame data */ })
-      // });
-      // const result = await response.json();
-
-      // Simulate face recognition processing
-      await new Promise(resolve => setTimeout(resolve, 2500));
-
-      // Mock database of students and teachers
-      const mockUsers = [
-        { id: 'S001', name: 'John Doe', role: 'student' as const },
-        { id: 'S002', name: 'Jane Smith', role: 'student' as const },
-        { id: 'S003', name: 'Alex Johnson', role: 'student' as const },
-        { id: 'S004', name: 'Emily Davis', role: 'student' as const },
-        { id: 'T001', name: 'Prof. Williams', role: 'teacher' as const },
-        { id: 'T002', name: 'Dr. Brown', role: 'teacher' as const }
-      ];
-
-      // 70% chance of finding a match
-      const shouldMatch = Math.random() > 0.3;
-
-      if (shouldMatch && mockUsers.length > 0) {
-        const randomUser = mockUsers[Math.floor(Math.random() * mockUsers.length)];
+      const result = await recognizeFaceFromVideo(videoRef.current);
+      
+      if (result) {
         setRecognitionResult({
-          id: randomUser.id,
-          name: randomUser.name,
-          role: randomUser.role,
-          matched: true,
-          timestamp: new Date().toLocaleTimeString()
-        });
-      } else {
-        setRecognitionResult({
-          id: '',
-          name: '',
-          role: 'student',
-          matched: false,
-          timestamp: new Date().toLocaleTimeString()
+          id: result.rollNo,
+          firstName: result.firstName,
+          lastName: result.lastName,
+          rollNo: result.rollNo,
+          email: result.email,
+          class: result.class,
+          section: result.section,
+          role: result.role,
+          photo: result.photo,
+          matched: result.matched,
+          confidence: result.confidence,
+          timestamp: result.timestamp
         });
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Recognition failed';
+      const errorMessage = err instanceof Error ? err.message : 'Face recognition failed';
       setError(errorMessage);
       console.error('Recognition Error:', err);
     } finally {
@@ -346,7 +362,9 @@ export default function HomePage() {
                 </label>
                 <div className="bg-slate-800/70 rounded-lg p-4 border border-slate-700 backdrop-blur-sm">
                   {recognitionResult?.matched ? (
-                    <p className="text-[#A982D9] text-2xl font-bold">{recognitionResult.name}</p>
+                    <p className="text-[#A982D9] text-2xl font-bold">
+                      {recognitionResult.firstName} {recognitionResult.lastName}
+                    </p>
                   ) : recognitionResult && !recognitionResult.matched ? (
                     <p className="text-slate-500 text-lg">-- Not Recognized --</p>
                   ) : (
