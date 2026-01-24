@@ -23,7 +23,6 @@ export default function HomePage() {
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [modelsLoading, setModelsLoading] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -32,12 +31,9 @@ export default function HomePage() {
   useEffect(() => {
     const initModels = async () => {
       try {
-        setModelsLoading(true);
         await loadFaceApiModels();
-        setModelsLoading(false);
       } catch (err) {
         console.error('Failed to load models:', err);
-        setModelsLoading(false);
       }
     };
     
@@ -95,9 +91,12 @@ export default function HomePage() {
       if (!videoRef.current) return;
       
       try {
-        const detections = await (window as any).faceapi?.detectSingleFace(
+        const faceapi = (window as any).faceapi;
+        if (!faceapi) return;
+        
+        const detections = await faceapi.detectSingleFace(
           videoRef.current,
-          new (window as any).faceapi?.TinyFaceDetectorOptions?.()
+          new faceapi.TinyFaceDetectorOptions()
         );
         
         setFaceDetected(!!detections);

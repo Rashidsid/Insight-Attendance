@@ -1,6 +1,5 @@
 import { collection, getDocs, query, where } from "firebase/firestore";
-import { ref, getBytes } from "firebase/storage";
-import { db, storage } from "../config/firebase";
+import { db } from "../config/firebase";
 import * as faceapi from "face-api.js";
 
 export interface RecognitionResult {
@@ -66,7 +65,7 @@ export const captureFaceDescriptor = async (
 };
 
 // Get all students with photos from Firestore
-export const getAllStudentsWithPhotos = async () => {
+export const getAllStudentsWithPhotos = async (): Promise<any[]> => {
   try {
     const querySnapshot = await getDocs(
       collection(db, STUDENTS_COLLECTION)
@@ -83,7 +82,7 @@ export const getAllStudentsWithPhotos = async () => {
 };
 
 // Get all teachers with photos from Firestore
-export const getAllTeachersWithPhotos = async () => {
+export const getAllTeachersWithPhotos = async (): Promise<any[]> => {
   try {
     const querySnapshot = await getDocs(
       collection(db, TEACHERS_COLLECTION)
@@ -146,7 +145,7 @@ export const findBestMatch = (
   capturedDescriptor: Float32Array,
   storedDescriptors: { id: string; descriptor: Float32Array; data: any }[]
 ): { match: any; confidence: number; distance: number } | null => {
-  let bestMatch = null;
+  let bestMatch: any = null;
   let minDistance = Infinity;
 
   storedDescriptors.forEach(({ id, descriptor, data }) => {
