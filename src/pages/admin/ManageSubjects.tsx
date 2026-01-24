@@ -286,7 +286,7 @@ export default function ManageSubjects() {
                         Edit
                       </Button>
                       <Button
-                        onClick={() => setDeleteId(subject.id)}
+                        onClick={() => subject.id && setDeleteId(subject.id)}
                         variant="outline"
                         size="sm"
                         className="gap-2 rounded-lg text-red-600 hover:text-red-700 hover:bg-red-50"
