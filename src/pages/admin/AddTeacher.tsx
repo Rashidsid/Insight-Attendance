@@ -8,6 +8,7 @@ import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { addTeacher } from '../../services/teacherService';
+import { notifyTeacherCreated } from '../../services/emailService';
 
 interface Subject {
   id: string;
@@ -89,7 +90,26 @@ export default function AddTeacher() {
       // Add to Firebase
       await addTeacher(newTeacher);
       
-      toast.success('Teacher added successfully!');
+      // Send welcome email notification
+      if (formData.email && formData.email.trim()) {
+        const emailResult = await notifyTeacherCreated({
+          email: formData.email,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          teacherId: formData.teacherId,
+          subject: formData.subject,
+          instituteName: 'Herald College Kathmandu', // Update this with your institution name
+        });
+
+        if (emailResult.success) {
+          toast.success('Teacher added and welcome email sent!');
+        } else {
+          toast.success('Teacher added successfully! (Email notification pending)');
+        }
+      } else {
+        toast.success('Teacher added successfully!');
+      }
+
       navigate('/admin/teachers');
     } catch (error) {
       console.error('Error adding teacher:', error);

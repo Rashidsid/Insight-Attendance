@@ -9,6 +9,7 @@ import { ArrowLeft, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { addStudent } from '../../services/studentService';
 import { getUniqueClassNames, getSectionsForClass } from '../../services/classService';
+import { notifyStudentCreated } from '../../services/emailService';
 
 export default function AddStudent() {
   const navigate = useNavigate();
@@ -87,7 +88,27 @@ export default function AddStudent() {
       // Add student to Firebase
       await addStudent(newStudent as any);
       
-      toast.success('Student added successfully!');
+      // Send welcome email notification
+      if (formData.email && formData.email.trim()) {
+        const emailResult = await notifyStudentCreated({
+          email: formData.email,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          rollNo: formData.rollNo,
+          class: formData.class,
+          section: formData.section,
+          instituteName: 'Herald College Kathmandu', // Update this with your institution name
+        });
+
+        if (emailResult.success) {
+          toast.success('Student added and welcome email sent!');
+        } else {
+          toast.success('Student added successfully! (Email notification pending)');
+        }
+      } else {
+        toast.success('Student added successfully!');
+      }
+
       setFormData({
         firstName: '',
         lastName: '',
