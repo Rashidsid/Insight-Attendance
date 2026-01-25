@@ -6,6 +6,7 @@ import { Label } from '../../components/ui/label';
 import { Card } from '../../components/ui/card';
 import { ArrowLeft, Plus, Pencil, Trash2, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTheme } from '../../contexts/ThemeContext';
 import {
   Table,
   TableBody,
@@ -31,6 +32,7 @@ interface ClassSection extends Class {}
 
 export default function ManageClasses() {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [classes, setClasses] = useState<ClassSection[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -148,7 +150,8 @@ export default function ManageClasses() {
           {!isAdding && !editingId && (
             <Button
               onClick={() => setIsAdding(true)}
-              className="gap-2 bg-[#A982D9] hover:bg-[#9770C8] rounded-xl h-12"
+              style={{ backgroundColor: theme.primaryColor }}
+              className="gap-2 hover:opacity-90 rounded-xl h-12"
             >
               <Plus className="w-4 h-4" />
               Add New Class
@@ -159,7 +162,10 @@ export default function ManageClasses() {
 
       {/* Add/Edit Form */}
       {(isAdding || editingId) && (
-        <Card className="p-6 mb-6 border-[#A982D9] border-2">
+        <Card 
+          className="p-6 mb-6 border-2"
+          style={{ borderColor: theme.primaryColor }}
+        >
           <h3 className="mb-4">{isAdding ? 'Add New Class' : 'Edit Class'}</h3>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
@@ -186,7 +192,8 @@ export default function ManageClasses() {
           <div className="flex gap-3">
             <Button
               onClick={isAdding ? handleAdd : handleUpdate}
-              className="gap-2 bg-[#A982D9] hover:bg-[#9770C8] rounded-xl"
+              style={{ backgroundColor: theme.primaryColor }}
+              className="gap-2 hover:opacity-90 rounded-xl"
             >
               <Save className="w-4 h-4" />
               {isAdding ? 'Add Class' : 'Update Class'}
@@ -231,7 +238,13 @@ export default function ManageClasses() {
                   <TableCell>{classItem.name}</TableCell>
                   <TableCell>{classItem.section}</TableCell>
                   <TableCell>
-                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-[#E7D7F6] text-[#A982D9]">
+                    <span 
+                      className="inline-flex items-center px-3 py-1 rounded-full"
+                      style={{ 
+                        backgroundColor: theme.sidebarBg,
+                        color: theme.primaryColor 
+                      }}
+                    >
                       {classItem.name}-{classItem.section}
                     </span>
                   </TableCell>
