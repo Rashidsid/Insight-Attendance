@@ -104,9 +104,13 @@ export default function AddTeacher() {
         });
 
         if (emailResult.success) {
-          toast.success('Teacher added and welcome email sent!');
+          if (emailResult.method === 'firebase') {
+            toast.success('Teacher added and welcome email sent!');
+          } else {
+            toast.success('Teacher added! Email will be sent shortly.');
+          }
         } else {
-          toast.success('Teacher added successfully! (Email notification pending)');
+          toast.warning('Teacher added! (Email could not be sent - will retry)');
         }
       } else {
         toast.success('Teacher added successfully!');

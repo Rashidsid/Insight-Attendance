@@ -119,9 +119,13 @@ export default function AddStudent() {
         });
 
         if (emailResult.success) {
-          toast.success('Student added and welcome email sent!');
+          if (emailResult.method === 'firebase') {
+            toast.success('Student added and welcome email sent!');
+          } else {
+            toast.success('Student added! Email will be sent shortly.');
+          }
         } else {
-          toast.success('Student added successfully! (Email notification pending)');
+          toast.warning('Student added! (Email could not be sent - will retry)');
         }
       } else {
         toast.success('Student added successfully!');

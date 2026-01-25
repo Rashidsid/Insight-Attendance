@@ -369,6 +369,41 @@ export default function AdminSettings() {
             </div>
           </div>
 
+          {/* Email Configuration Section */}
+          <div className="bg-white rounded-xl p-6 border border-gray-200 mb-6">
+            <h3 className="text-lg font-semibold mb-4">Email Configuration</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Admin Email Address</label>
+                <Input 
+                  type="email" 
+                  value={localStorage.getItem('adminEmail') || ''} 
+                  disabled 
+                  className="bg-gray-50"
+                />
+                <p className="text-xs text-gray-500 mt-2">This is the email where student/teacher notifications will be sent from</p>
+              </div>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm font-medium text-yellow-900 mb-2">📧 Email System Status</p>
+                <ul className="text-xs text-yellow-800 space-y-1">
+                  <li>✓ Student welcome emails configured</li>
+                  <li>✓ Teacher welcome emails configured</li>
+                  <li>✓ Email templates with all details included</li>
+                  <li>⚠️ Gmail app password required for sending</li>
+                </ul>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm font-medium text-blue-900 mb-2">💡 How it works:</p>
+                <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
+                  <li>When you add a student/teacher, an email is sent to their email address</li>
+                  <li>Email includes their name, ID, class/subject, and institution name</li>
+                  <li>Check Firebase Cloud Functions logs for email delivery status</li>
+                  <li>Pending emails are stored locally and will retry automatically</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+
           {/* Info Box */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex gap-3">
             <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />

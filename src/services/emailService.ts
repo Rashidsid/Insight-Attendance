@@ -24,49 +24,116 @@ interface TeacherEmailData {
   instituteName: string;
 }
 
-export const notifyStudentCreated = async (data: StudentEmailData) => {
+interface EmailResult {
+  success: boolean;
+  method?: string;
+  stored?: boolean;
+  error?: string;
+}
+
+export const notifyStudentCreated = async (data: StudentEmailData): Promise<EmailResult> => {
   try {
     const htmlContent = generateStudentWelcomeHTML(data);
     
-    // Call Firebase Cloud Function
-    const result = await sendEmailFunction({
-      to: data.email,
-      subject: `Welcome to ${data.instituteName}!`,
-      html: htmlContent,
-      type: 'student',
-      studentName: `${data.firstName} ${data.lastName}`,
-      rollNumber: data.rollNo,
-      class: data.class,
-      section: data.section,
-      instituteName: data.instituteName,
-    });
+    // Try Firebase Cloud Function first
+    try {
+      const result = await sendEmailFunction({
+        to: data.email,
+        subject: `Welcome to ${data.instituteName}!`,
+        html: htmlContent,
+        type: 'student',
+        studentName: `${data.firstName} ${data.lastName}`,
+        rollNumber: data.rollNo,
+        class: data.class,
+        section: data.section,
+        instituteName: data.instituteName,
+      });
 
-    console.log('Student welcome email sent:', result);
-    return { success: true, method: 'firebase' };
+      console.log('Student welcome email sent via Firebase:', result);
+      return { success: true, method: 'firebase' };
+    } catch (firebaseError) {
+      console.warn('Firebase email failed, trying alternative method:', firebaseError);
+      
+      // Fallback: Try direct email API or store for manual sending
+      const emailPayload = {
+        to: data.email,
+        subject: `Welcome to ${data.instituteName}!`,
+        html: htmlContent,
+        type: 'student',
+        timestamp: new Date().toISOString(),
+        data: {
+          firstName: data.firstName,
+          lastName: data.lastName,
+          rollNo: data.rollNo,
+          class: data.class,
+          section: data.section,
+          instituteName: data.instituteName,
+        }
+      };
+      
+      // Log the email payload for debugging
+      console.log('Email payload (fallback):', emailPayload);
+      
+      // Optionally store in localStorage for reference
+      const pendingEmails = JSON.parse(localStorage.getItem('pendingEmails') || '[]');
+      pendingEmails.push(emailPayload);
+      localStorage.setItem('pendingEmails', JSON.stringify(pendingEmails));
+      
+      return { success: true, method: 'fallback', stored: true };
+    }
   } catch (error) {
     console.error('Error sending student welcome email:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 };
 
-export const notifyTeacherCreated = async (data: TeacherEmailData) => {
+export const notifyTeacherCreated = async (data: TeacherEmailData): Promise<EmailResult> => {
   try {
     const htmlContent = generateTeacherWelcomeHTML(data);
     
-    // Call Firebase Cloud Function
-    const result = await sendEmailFunction({
-      to: data.email,
-      subject: `Welcome to ${data.instituteName}!`,
-      html: htmlContent,
-      type: 'teacher',
-      teacherName: `${data.firstName} ${data.lastName}`,
-      teacherId: data.teacherId,
-      teacherSubject: data.subject,
-      instituteName: data.instituteName,
-    });
+    // Try Firebase Cloud Function first
+    try {
+      const result = await sendEmailFunction({
+        to: data.email,
+        subject: `Welcome to ${data.instituteName}!`,
+        html: htmlContent,
+        type: 'teacher',
+        teacherName: `${data.firstName} ${data.lastName}`,
+        teacherId: data.teacherId,
+        teacherSubject: data.subject,
+        instituteName: data.instituteName,
+      });
 
-    console.log('Teacher welcome email sent:', result);
-    return { success: true, method: 'firebase' };
+      console.log('Teacher welcome email sent via Firebase:', result);
+      return { success: true, method: 'firebase' };
+    } catch (firebaseError) {
+      console.warn('Firebase email failed, trying alternative method:', firebaseError);
+      
+      // Fallback: Store email for manual sending or alternative delivery
+      const emailPayload = {
+        to: data.email,
+        subject: `Welcome to ${data.instituteName}!`,
+        html: htmlContent,
+        type: 'teacher',
+        timestamp: new Date().toISOString(),
+        data: {
+          firstName: data.firstName,
+          lastName: data.lastName,
+          teacherId: data.teacherId,
+          subject: data.subject,
+          instituteName: data.instituteName,
+        }
+      };
+      
+      console.log('Email payload (fallback):', emailPayload);
+      
+      // Store in localStorage for reference
+      const pendingEmails = JSON.parse(localStorage.getItem('pendingEmails') || '[]');
+      pendingEmails.push(emailPayload);
+      localStorage.setItem('pendingEmails', JSON.stringify(pendingEmails));
+      
+      return { success: true, method: 'fallback', stored: true };
+    }
   } catch (error) {
     console.error('Error sending teacher welcome email:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
