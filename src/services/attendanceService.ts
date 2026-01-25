@@ -337,3 +337,130 @@ export const getStudentSummary = async (studentId: string): Promise<any> => {
     throw error;
   }
 };
+
+/**
+ * Mark attendance for student via face recognition
+ */
+export const markAttendanceViaFaceRecognition = async (
+  studentId: string,
+  studentName: string,
+  className: string,
+  confidence: number
+): Promise<{ success: boolean; message: string }> => {
+  try {
+    console.log('[DEBUG] markAttendanceViaFaceRecognition called with:', { studentId, studentName, className, confidence });
+    
+    const today = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
+    const currentTime = new Date().toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    });
+
+    console.log('[DEBUG] Today:', today, 'Time:', currentTime);
+
+    // Check if already marked today
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where("studentId", "==", studentId),
+      where("date", "==", today)
+    );
+    const existingRecords = await getDocs(q);
+
+    if (existingRecords.size > 0) {
+      console.log('[WARN] Attendance already marked today for student:', studentId);
+      return {
+        success: false,
+        message: "Attendance already marked for today!",
+      };
+    }
+
+    // Add attendance record
+    const attendanceDocRef = await addDoc(collection(db, COLLECTION_NAME), {
+      studentId,
+      studentName,
+      class: className,
+      date: today,
+      time: currentTime,
+      status: "Present",
+      recognitionConfidence: Math.round(100 - confidence), // Lower confidence in API = better match
+      recognitionMethod: "Face Recognition",
+      remarks: `Face recognized with ${Math.round(100 - confidence)}% confidence`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    console.log('[DEBUG] Attendance record created:', attendanceDocRef.id);
+
+    // Update student document with recent attendance
+    const studentsRef = collection(db, "students");
+    const studentQ = query(studentsRef, where("id", "==", studentId));
+    const studentQueryDocs = await getDocs(studentQ);
+
+    console.log('[DEBUG] Student query found:', studentQueryDocs.size, 'documents');
+
+    // If not found by 'id' field, try by document ID
+    let foundStudent = false;
+    if (!studentQueryDocs.empty) {
+      const studentDoc = studentQueryDocs.docs[0];
+      const recentAttendance = [
+        {
+          date: today,
+          time: currentTime,
+          status: "Present",
+          confidence: Math.round(100 - confidence),
+          recognitionMethod: "Face Recognition",
+        },
+      ];
+
+      await updateDoc(studentDoc.ref, {
+        recentAttendance,
+        lastAttendanceTime: Timestamp.fromDate(new Date()),
+        lastAttendanceDate: today,
+      });
+      
+      foundStudent = true;
+      console.log('[DEBUG] Updated student record by id field');
+    }
+
+    // Try updating by document ID if not found by 'id' field
+    if (!foundStudent) {
+      try {
+        const studentRef = doc(db, "students", studentId);
+        const recentAttendance = [
+          {
+            date: today,
+            time: currentTime,
+            status: "Present",
+            confidence: Math.round(100 - confidence),
+            recognitionMethod: "Face Recognition",
+          },
+        ];
+
+        await updateDoc(studentRef, {
+          recentAttendance,
+          lastAttendanceTime: Timestamp.fromDate(new Date()),
+          lastAttendanceDate: today,
+        });
+        
+        console.log('[DEBUG] Updated student record by document ID');
+      } catch (updateError) {
+        console.warn('[WARN] Could not update student record:', updateError);
+        // Don't fail if student update fails, attendance is already recorded
+      }
+    }
+
+    console.log(`✓ Attendance marked for ${studentName} at ${currentTime}`);
+    return {
+      success: true,
+      message: `Attendance marked successfully at ${currentTime}`,
+    };
+  } catch (error) {
+    console.error("Error marking attendance via face recognition:", error);
+    return {
+      success: false,
+      message: "Failed to mark attendance. Please try again.",
+    };
+  }
+};
