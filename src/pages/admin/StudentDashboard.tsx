@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Label } from '../../components/ui/label';
 import { Edit, Trash2, Eye, UserPlus, Search, X } from 'lucide-react';
 import { useSearch } from '../../contexts/SearchContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -39,6 +41,8 @@ export default function StudentDashboard() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [localSearch, setLocalSearch] = useState('');
+  const [filterClass, setFilterClass] = useState('all');
+  const [filterSection, setFilterSection] = useState('all');
 
   // Load students from Firebase
   useEffect(() => {
@@ -111,8 +115,18 @@ export default function StudentDashboard() {
       student.class.toLowerCase().includes(localQuery) ||
       student.section.toLowerCase().includes(localQuery);
     
-    return matchesGlobal && matchesLocal;
+    // Filter by class
+    const matchesClass = filterClass === 'all' || student.class === filterClass;
+    
+    // Filter by section
+    const matchesSection = filterSection === 'all' || student.section === filterSection;
+    
+    return matchesGlobal && matchesLocal && matchesClass && matchesSection;
   });
+
+  // Get unique classes and sections for filter dropdowns
+  const uniqueClasses = [...new Set(students.map(s => s.class))].sort();
+  const uniqueSections = [...new Set(students.map(s => s.section))].sort();
 
   if (loading) {
     return (
@@ -172,6 +186,39 @@ export default function StudentDashboard() {
             <p className="text-3xl">{stat.value}</p>
           </div>
         ))}
+      </div>
+
+      {/* Filter Controls - Below Stats on Right Side */}
+      <div className="flex justify-end gap-4 mb-6">
+        <div className="max-w-xs">
+          <Label className="text-sm text-gray-600 mb-2 block">Filter by Class</Label>
+          <Select value={filterClass} onValueChange={setFilterClass}>
+            <SelectTrigger className="h-10 rounded-lg border-gray-300">
+              <SelectValue placeholder="All Classes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Classes</SelectItem>
+              {uniqueClasses.map(cls => (
+                <SelectItem key={cls} value={cls}>{cls}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="max-w-xs">
+          <Label className="text-sm text-gray-600 mb-2 block">Filter by Section</Label>
+          <Select value={filterSection} onValueChange={setFilterSection}>
+            <SelectTrigger className="h-10 rounded-lg border-gray-300">
+              <SelectValue placeholder="All Sections" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sections</SelectItem>
+              {uniqueSections.map(section => (
+                <SelectItem key={section} value={section}>{section}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Students Table */}
