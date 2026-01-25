@@ -6,6 +6,7 @@ import { Label } from '../../components/ui/label';
 import { Card } from '../../components/ui/card';
 import { ArrowLeft, Plus, Pencil, Trash2, Save, X, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTheme } from '../../contexts/ThemeContext';
 import { getAllSubjects, addSubject, updateSubject, deleteSubject } from '../../services/classService';
 import {
   Table,
@@ -34,6 +35,7 @@ interface Subject {
 
 export default function ManageSubjects() {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -179,7 +181,8 @@ export default function ManageSubjects() {
           {!isAdding && !editingId && (
             <Button
               onClick={() => setIsAdding(true)}
-              className="gap-2 bg-[#A982D9] hover:bg-[#9770C8] rounded-xl h-12"
+              style={{ backgroundColor: theme.primaryColor }}
+              className="gap-2 hover:opacity-90 rounded-xl h-12"
             >
               <Plus className="w-4 h-4" />
               Add New Subject
@@ -190,7 +193,10 @@ export default function ManageSubjects() {
 
       {/* Add/Edit Form */}
       {(isAdding || editingId) && (
-        <Card className="p-6 mb-6 border-[#A982D9] border-2">
+        <Card 
+          className="p-6 mb-6 border-2"
+          style={{ borderColor: theme.primaryColor }}
+        >
           <h3 className="mb-4">{isAdding ? 'Add New Subject' : 'Edit Subject'}</h3>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
@@ -219,7 +225,8 @@ export default function ManageSubjects() {
           <div className="flex gap-3">
             <Button
               onClick={isAdding ? handleAdd : handleUpdate}
-              className="gap-2 bg-[#A982D9] hover:bg-[#9770C8] rounded-xl"
+              style={{ backgroundColor: theme.primaryColor }}
+              className="gap-2 hover:opacity-90 rounded-xl"
             >
               <Save className="w-4 h-4" />
               {isAdding ? 'Add Subject' : 'Update Subject'}
@@ -262,14 +269,26 @@ export default function ManageSubjects() {
                   <TableCell>{index + 1}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-[#E7D7F6] rounded-lg flex items-center justify-center">
-                        <BookOpen className="w-5 h-5 text-[#A982D9]" />
+                      <div 
+                        className="w-10 h-10 rounded-lg flex items-center justify-center"
+                        style={{ backgroundColor: theme.sidebarBg }}
+                      >
+                        <BookOpen 
+                          className="w-5 h-5"
+                          style={{ color: theme.primaryColor }}
+                        />
                       </div>
                       <span>{subject.name}</span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-[#E7D7F6] text-[#A982D9]">
+                    <span 
+                      className="inline-flex items-center px-3 py-1 rounded-full"
+                      style={{ 
+                        backgroundColor: theme.sidebarBg,
+                        color: theme.primaryColor 
+                      }}
+                    >
                       {subject.code}
                     </span>
                   </TableCell>
