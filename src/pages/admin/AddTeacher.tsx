@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTheme } from '../../contexts/ThemeContext';
 import { addTeacher } from '../../services/teacherService';
 import { notifyTeacherCreated } from '../../services/emailService';
 
@@ -18,6 +19,7 @@ interface Subject {
 
 export default function AddTeacher() {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -172,8 +174,11 @@ export default function AddTeacher() {
                   <img src={photoPreview} alt="Teacher preview" className="w-full h-full object-cover" />
                 ) : (
                   <div className="flex flex-col items-center justify-center">
-                    <div className="w-16 h-16 bg-[#E7D7F6] rounded-full flex items-center justify-center mb-4">
-                      <Upload className="w-8 h-8 text-[#A982D9]" />
+                    <div 
+                      className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+                      style={{ backgroundColor: theme.sidebarBg }}
+                    >
+                      <Upload className="w-8 h-8" style={{ color: theme.primaryColor }} />
                     </div>
                     <p className="text-sm text-gray-600 mb-2">Upload teacher photo</p>
                     <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
@@ -404,7 +409,8 @@ export default function AddTeacher() {
               <Button
                 type="submit"
                 disabled={loading}
-                className="flex-1 h-12 rounded-xl bg-[#A982D9] hover:bg-[#9770C8]"
+                style={{ backgroundColor: theme.primaryColor }}
+                className="flex-1 h-12 rounded-xl hover:opacity-90"
               >
                 {loading ? 'Adding Teacher...' : 'Add Teacher'}
               </Button>
