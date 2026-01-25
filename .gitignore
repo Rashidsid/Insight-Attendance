@@ -2,6 +2,7 @@
 node_modules/
 dist/
 build/
+python-face-api/
 
 # Environment variables
 .env
