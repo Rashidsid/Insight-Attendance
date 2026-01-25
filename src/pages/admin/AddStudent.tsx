@@ -119,7 +119,7 @@ export default function AddStudent() {
         });
 
         if (emailResult.success) {
-          if (emailResult.method === 'firebase') {
+          if (emailResult.method === 'brevo') {
             toast.success('Student added and welcome email sent!');
           } else {
             toast.success('Student added! Email will be sent shortly.');

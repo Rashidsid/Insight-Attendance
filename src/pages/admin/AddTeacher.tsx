@@ -104,7 +104,7 @@ export default function AddTeacher() {
         });
 
         if (emailResult.success) {
-          if (emailResult.method === 'firebase') {
+          if (emailResult.method === 'brevo') {
             toast.success('Teacher added and welcome email sent!');
           } else {
             toast.success('Teacher added! Email will be sent shortly.');
