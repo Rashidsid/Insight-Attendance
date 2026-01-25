@@ -5,6 +5,7 @@ import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Edit, Trash2, Eye, UserPlus, Search, X } from 'lucide-react';
 import { useSearch } from '../../contexts/SearchContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { toast } from 'sonner';
 import { getAllTeachers, deleteTeacher, updateTeacherStatus } from '../../services/teacherService';
 import {
@@ -34,6 +35,7 @@ interface Teacher {
 export default function TeacherDashboard() {
   const navigate = useNavigate();
   const { searchQuery } = useSearch();
+  const { theme } = useTheme();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,7 +75,7 @@ export default function TeacherDashboard() {
     { label: 'Total Teachers', value: teachers.length.toString(), color: 'bg-indigo-500' },
     { label: 'Active Today', value: teachers.filter(t => t.status === 'Active').length.toString(), color: 'bg-green-500' },
     { label: 'On Leave', value: teachers.filter(t => t.status === 'On Leave').length.toString(), color: 'bg-orange-500' },
-    { label: 'New This Month', value: '5', color: 'bg-[#A982D9]' },
+    { label: 'New This Month', value: '5', color: `var(--primary-color)` },
   ];
 
   const handleStatusChange = async (teacherId: string | undefined, newStatus: string) => {
@@ -152,7 +154,8 @@ export default function TeacherDashboard() {
         </div>
         <Button
           onClick={() => navigate('/admin/teachers/add')}
-          className="bg-[#A982D9] hover:bg-[#9770C8] rounded-xl h-12 gap-2"
+          style={{ backgroundColor: theme.primaryColor }}
+          className="hover:opacity-90 rounded-xl h-12 gap-2"
         >
           <UserPlus className="w-5 h-5" />
           Add New Teacher
@@ -196,7 +199,7 @@ export default function TeacherDashboard() {
       {/* Teachers Table */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         {/* Table Header */}
-        <div className="bg-[#A982D9] text-white h-[60px] px-6 flex items-center">
+        <div style={{ backgroundColor: theme.primaryColor }} className="text-white h-[60px] px-6 flex items-center">
           <div className="flex-1 grid grid-cols-7 gap-4">
             <div className="col-span-1">Teacher ID</div>
             <div className="col-span-2">Teacher Name</div>
@@ -225,7 +228,10 @@ export default function TeacherDashboard() {
                   <div className="col-span-1 text-gray-900 font-medium">{teacher.teacherId}</div>
                   <div className="col-span-2">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-[#E7D7F6] text-[#A982D9] font-semibold text-sm overflow-hidden">
+                      <div 
+                        className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center font-semibold text-sm overflow-hidden"
+                        style={{ backgroundColor: theme.sidebarBg, color: theme.primaryColor }}
+                      >
                         {teacher.photo ? (
                           <img src={teacher.photo} alt={teacher.name} className="w-full h-full object-cover" />
                         ) : (
