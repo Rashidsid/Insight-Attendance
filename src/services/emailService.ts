@@ -2,7 +2,8 @@
 // Using Brevo SMTP API - Free and allows individual recipients
 
 // Brevo configuration (Free tier: 300 emails/day)
-const BREVO_API_KEY = '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';
+// API Key should be stored in environment variable: VITE_BREVO_API_KEY
+const BREVO_API_KEY = import.meta.env.VITE_BREVO_API_KEY || '';
 const BREVO_SENDER_EMAIL = 'rashidzayn11@gmail.com';
 const BREVO_SENDER_NAME = 'Insight Attendance System';
 
