@@ -1,5 +1,7 @@
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "../config/firebase";
+import { db } from '../config/firebase';
+import { collection, getDocs, query, where, addDoc } from 'firebase/firestore';
+
+const PYTHON_API_URL = 'http://localhost:5000';
 
 export interface RecognitionResult {
   id: string;
@@ -9,378 +11,309 @@ export interface RecognitionResult {
   email: string;
   class: string;
   section: string;
-  role: "student" | "teacher";
+  role: 'student' | 'teacher';
   photo?: string;
   matched: boolean;
   confidence: number;
   timestamp: string;
 }
 
-const STUDENTS_COLLECTION = "students";
-const TEACHERS_COLLECTION = "teachers";
-const MIN_CONFIDENCE_THRESHOLD = 0.6;
-
-// Initialize face-api models
-let modelsLoaded = false;
-
-export const loadFaceApiModels = async () => {
-  if (modelsLoaded) {
-    console.log("Models already loaded");
-    return;
+/**
+ * Convert video frame to base64 image data URL
+ */
+export const captureVideoFrameAsBase64 = (video: HTMLVideoElement): string => {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Could not get canvas context');
   }
-  
+  ctx.drawImage(video, 0, 0);
+  return canvas.toDataURL('image/jpeg');
+};
+
+/**
+ * Send image to Python API for face recognition
+ */
+export const recognizeFromPythonAPI = async (
+  base64Image: string
+): Promise<{ usn: string; confidence: number } | null> => {
   try {
-    // Get the global faceapi object from CDN
-    const faceapiGlobal = (window as any).faceapi;
+    // Fetch all enrolled faces from Firestore
+    console.log('[DEBUG] Fetching enrolled faces from Firestore');
+    const faceDataCollection = collection(db, 'faceData');
+    const faceQuerySnapshot = await getDocs(faceDataCollection);
     
-    if (!faceapiGlobal) {
-      throw new Error("Face-API library not loaded. Check if CDN script loaded correctly.");
+    const enrolledFaces: { [usn: string]: string } = {};
+    faceQuerySnapshot.forEach((doc) => {
+      const data = doc.data();
+      console.log('[DEBUG] Found enrolled face for USN:', data.usn, 'Data keys:', Object.keys(data));
+      enrolledFaces[data.usn] = data.faceBase64;
+    });
+    
+    console.log('[DEBUG] Found enrolled faces count:', Object.keys(enrolledFaces).length);
+    console.log('[DEBUG] Enrolled face USNs:', Object.keys(enrolledFaces));
+    
+    const response = await fetch(`${PYTHON_API_URL}/recognize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        image: base64Image,
+        enrolledFaces: enrolledFaces, // Send face data from database
+      }),
+    });
+    
+    console.log('[DEBUG] Sent to Python API. Enrolled faces count:', Object.keys(enrolledFaces).length);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.statusText}`);
     }
 
-    console.log("Starting to load face-api models...");
-    
-    // Try different CDN URLs for the weights
-    const modelUrls = [
-      "https://unpkg.com/face-api.js@0.22.2/weights",
-      "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights",
-      "https://unpkg.com/face-api.js/weights",
-    ];
+    const data = await response.json();
 
-    let loadedSuccessfully = false;
-    let lastError: any = null;
-
-    for (const url of modelUrls) {
-      try {
-        console.log(`Attempting to load models from: ${url}`);
-        
-        await Promise.all([
-          faceapiGlobal.nets.tinyFaceDetector.loadFromUri(url),
-          faceapiGlobal.nets.faceLandmark68Net.loadFromUri(url),
-          faceapiGlobal.nets.faceRecognitionNet.loadFromUri(url),
-        ]);
-        
-        console.log(`✓ Face-API models loaded successfully from: ${url}`);
-        loadedSuccessfully = true;
-        break;
-      } catch (err) {
-        lastError = err;
-        console.warn(`✗ Failed to load from ${url}:`, err);
-        continue;
-      }
+    // Check if face was detected
+    if (data.usn === 'No face detected') {
+      return null;
     }
 
-    if (!loadedSuccessfully) {
-      throw new Error(`Failed to load models from all sources. Last error: ${lastError?.message || lastError}`);
-    }
-    
-    // Set the module-level flag AFTER successful loading
-    modelsLoaded = true;
-    console.log("✓ Face-API models initialized successfully");
+    return {
+      usn: data.usn,
+      confidence: data.confidence,
+    };
   } catch (error) {
-    console.error("Error loading face-api models:", error);
-    modelsLoaded = false;
-    throw new Error("Failed to load face recognition models. Please refresh and check console for details.");
+    console.error('Error calling Python API:', error);
+    throw error;
   }
 };
 
-// Capture face descriptor from video element
-export const captureFaceDescriptor = async (
-  videoElement: HTMLVideoElement
-): Promise<Float32Array | null> => {
+/**
+ * Enroll a student face to Python API and store in Firestore
+ */
+export const enrollStudentFace = async (usn: string, base64Image: string): Promise<boolean> => {
   try {
-    const faceapiGlobal = (window as any).faceapi;
-    if (!faceapiGlobal) {
-      console.error("Face-API not available");
-      return null;
+    console.log('[DEBUG] Enrolling face for USN:', usn);
+    console.log('[DEBUG] Base64 image length:', base64Image.length);
+    console.log('[DEBUG] Calling Python API at:', `${PYTHON_API_URL}/enroll`);
+    
+    const response = await fetch(`${PYTHON_API_URL}/enroll`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        usn: usn,
+        image: base64Image,
+      }),
+    });
+
+    console.log('[DEBUG] Response status:', response.status);
+    console.log('[DEBUG] Response ok:', response.ok);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[DEBUG] Error response:', errorText);
+      throw new Error(`Enrollment API error: ${response.statusText} - ${errorText}`);
     }
 
-    const detections = await faceapiGlobal
-      .detectSingleFace(videoElement, new faceapiGlobal.TinyFaceDetectorOptions())
-      .withFaceLandmarks()
-      .withFaceDescriptor();
-
-    if (!detections) {
-      return null;
+    const responseData = await response.json();
+    console.log('[DEBUG] Enrollment response:', responseData);
+    
+    // Store face data in Firestore for future recognition
+    if (responseData.faceBase64) {
+      try {
+        // Create or update face data collection in Firestore
+        const faceDataCollection = collection(db, 'faceData');
+        await addDoc(faceDataCollection, {
+          usn: usn,
+          faceBase64: responseData.faceBase64,
+          enrolledAt: new Date()
+          // Only store extracted face ROI, not entire original image (to stay under 1MB limit)
+        });
+        console.log('[DEBUG] Face data stored in Firestore');
+      } catch (dbError) {
+        console.warn('[WARN] Could not store face data in Firestore:', dbError);
+        // Continue anyway, face is still available from filesystem
+      }
     }
-
-    return detections.descriptor;
+    
+    console.log('[SUCCESS] Student enrolled successfully for face recognition');
+    return true;
   } catch (error) {
-    console.error("Error capturing face descriptor:", error);
+    console.error('[ERROR] Error enrolling student face:', error);
+    throw error;
+  }
+};
+
+/**
+ * Main face recognition function using Python API
+ */
+export const recognizeFaceFromVideo = async (
+  videoElement: HTMLVideoElement
+): Promise<RecognitionResult | null> => {
+  try {
+    // Capture video frame as base64
+    const base64Image = captureVideoFrameAsBase64(videoElement);
+
+    // Send to Python API for recognition
+    const result = await recognizeFromPythonAPI(base64Image);
+
+    if (!result) {
+      // No face detected or recognized
+      return {
+        id: '',
+        firstName: '',
+        lastName: '',
+        rollNo: '',
+        email: '',
+        class: '',
+        section: '',
+        role: 'student',
+        matched: false,
+        confidence: 0,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+    }
+
+    const usn = result.usn;
+
+    // Query Firestore for student by roll number
+    let person = await queryStudentByRollNo(usn);
+
+    if (!person) {
+      // Try as teacher employee ID
+      person = await queryTeacherByEmployeeId(usn);
+    }
+
+    if (person) {
+      return {
+        id: person.id,
+        firstName: person.firstName || '',
+        lastName: person.lastName || '',
+        rollNo: person.rollNo || person.employeeId || '',
+        email: person.email || '',
+        class: person.class || person.department || '',
+        section: person.section || person.designation || '',
+        role: person.role || (person.rollNo ? 'student' : 'teacher'),
+        photo: person.photo,
+        matched: true,
+        confidence: result.confidence,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+    }
+
+    // Person not found in database
+    return {
+      id: '',
+      firstName: '',
+      lastName: '',
+      rollNo: usn,
+      email: '',
+      class: '',
+      section: '',
+      role: 'student',
+      matched: false,
+      confidence: result.confidence,
+      timestamp: new Date().toLocaleTimeString(),
+    };
+  } catch (error) {
+    console.error('Error in face recognition:', error);
+    throw error;
+  }
+};
+
+/**
+ * Query student by roll number from Firestore
+ */
+const queryStudentByRollNo = async (rollNo: string): Promise<any | null> => {
+  try {
+    const q = query(collection(db, 'students'), where('rollNo', '==', rollNo));
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+      return {
+        id: querySnapshot.docs[0].id,
+        ...querySnapshot.docs[0].data(),
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('Error querying student:', error);
     return null;
   }
 };
 
-// Get all students with photos from Firestore
+/**
+ * Query teacher by employee ID from Firestore
+ */
+const queryTeacherByEmployeeId = async (employeeId: string): Promise<any | null> => {
+  try {
+    const q = query(collection(db, 'teachers'), where('employeeId', '==', employeeId));
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+      return {
+        id: querySnapshot.docs[0].id,
+        ...querySnapshot.docs[0].data(),
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('Error querying teacher:', error);
+    return null;
+  }
+};
+
+/**
+ * Get all students with photos from Firestore
+ */
 export const getAllStudentsWithPhotos = async (): Promise<any[]> => {
   try {
-    const querySnapshot = await getDocs(
-      collection(db, STUDENTS_COLLECTION)
-    );
+    const querySnapshot = await getDocs(collection(db, 'students'));
     const students = querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     }));
     return students;
   } catch (error) {
-    console.error("Error fetching students:", error);
+    console.error('Error fetching students:', error);
     return [];
   }
 };
 
-// Get all teachers with photos from Firestore
+/**
+ * Get all teachers with photos from Firestore
+ */
 export const getAllTeachersWithPhotos = async (): Promise<any[]> => {
   try {
-    const querySnapshot = await getDocs(
-      collection(db, TEACHERS_COLLECTION)
-    );
+    const querySnapshot = await getDocs(collection(db, 'teachers'));
     const teachers = querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     }));
     return teachers;
   } catch (error) {
-    console.error("Error fetching teachers:", error);
+    console.error('Error fetching teachers:', error);
     return [];
   }
 };
 
-// Get face descriptor from image URL
-export const getFaceDescriptorFromUrl = async (
-  imageUrl: string
-): Promise<Float32Array | null> => {
+/**
+ * Check if Python API is accessible
+ */
+export const checkPythonAPIAvailability = async (): Promise<boolean> => {
   try {
-    const faceapiGlobal = (window as any).faceapi;
-    if (!faceapiGlobal) {
-      console.error("Face-API not available");
-      return null;
-    }
-
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = imageUrl;
-
-    return new Promise((resolve) => {
-      img.onload = async () => {
-        try {
-          const detections = await faceapiGlobal
-            .detectSingleFace(img, new faceapiGlobal.TinyFaceDetectorOptions())
-            .withFaceLandmarks()
-            .withFaceDescriptor();
-
-          if (!detections) {
-            resolve(null);
-          } else {
-            resolve(detections.descriptor);
-          }
-        } catch (err) {
-          console.error("Error extracting face descriptor from image:", err);
-          resolve(null);
-        }
-      };
-      img.onerror = () => {
-        console.error(`Failed to load image: ${imageUrl}`);
-        resolve(null);
-      };
+    console.log('[DEBUG] Checking Python API availability at:', `${PYTHON_API_URL}/health`);
+    const response = await fetch(`${PYTHON_API_URL}/health`, {
+      method: 'GET',
     });
+    console.log('[DEBUG] Health check response status:', response.status);
+    const isAvailable = response.ok;
+    console.log('[DEBUG] API is available:', isAvailable);
+    return isAvailable;
   } catch (error) {
-    console.error("Error getting face descriptor from URL:", error);
-    return null;
-  }
-};
-
-// Calculate distance between two face descriptors
-export const calculateDistance = (
-  descriptor1: Float32Array,
-  descriptor2: Float32Array
-): number => {
-  let distance = 0;
-  for (let i = 0; i < descriptor1.length; i++) {
-    distance += Math.pow(descriptor1[i] - descriptor2[i], 2);
-  }
-  return Math.sqrt(distance);
-};
-
-// Find best match among stored faces
-export const findBestMatch = (
-  capturedDescriptor: Float32Array,
-  storedDescriptors: { id: string; descriptor: Float32Array; data: any }[]
-): { match: any; confidence: number; distance: number } | null => {
-  let bestMatch: any = null;
-  let minDistance = Infinity;
-
-  storedDescriptors.forEach(({ id, descriptor, data }) => {
-    const distance = calculateDistance(capturedDescriptor, descriptor);
-    if (distance < minDistance) {
-      minDistance = distance;
-      bestMatch = { id, data, distance };
-    }
-  });
-
-  // Convert distance to confidence score (lower distance = higher confidence)
-  // Distance typically ranges from 0 to ~1.5, normalize to 0-1 range
-  const confidence = Math.max(0, 1 - minDistance / 1.5);
-
-  if (bestMatch && confidence >= MIN_CONFIDENCE_THRESHOLD) {
-    return {
-      match: bestMatch.data,
-      confidence: Math.round(confidence * 100),
-      distance: minDistance,
-    };
-  }
-
-  return null;
-};
-
-// Main face recognition function
-export const recognizeFaceFromVideo = async (
-  videoElement: HTMLVideoElement
-): Promise<RecognitionResult | null> => {
-  try {
-    // Load models if not already loaded
-    if (!modelsLoaded) {
-      await loadFaceApiModels();
-    }
-
-    // Capture face descriptor from video
-    const capturedDescriptor = await captureFaceDescriptor(videoElement);
-    if (!capturedDescriptor) {
-      throw new Error("No face detected in video");
-    }
-
-    // Get all students and teachers
-    const [students, teachers] = await Promise.all([
-      getAllStudentsWithPhotos(),
-      getAllTeachersWithPhotos(),
-    ]);
-
-    // Get descriptors for all stored photos
-    const storedDescriptors: {
-      id: string;
-      descriptor: Float32Array;
-      data: any;
-    }[] = [];
-
-    // Process student photos
-    for (const student of students) {
-      if (student.photo) {
-        const descriptor = await getFaceDescriptorFromUrl(student.photo);
-        if (descriptor) {
-          storedDescriptors.push({
-            id: student.id,
-            descriptor,
-            data: {
-              ...student,
-              role: "student",
-            },
-          });
-        }
-      }
-    }
-
-    // Process teacher photos
-    for (const teacher of teachers) {
-      if (teacher.photo) {
-        const descriptor = await getFaceDescriptorFromUrl(teacher.photo);
-        if (descriptor) {
-          storedDescriptors.push({
-            id: teacher.id,
-            descriptor,
-            data: {
-              ...teacher,
-              role: "teacher",
-            },
-          });
-        }
-      }
-    }
-
-    if (storedDescriptors.length === 0) {
-      throw new Error("No stored face data found in database");
-    }
-
-    // Find best match
-    const matchResult = findBestMatch(capturedDescriptor, storedDescriptors);
-
-    if (matchResult && matchResult.confidence >= 60) {
-      const { match, confidence } = matchResult;
-      return {
-        id: match.id || match.rollNo || "",
-        firstName: match.firstName || "",
-        lastName: match.lastName || "",
-        rollNo: match.rollNo || match.employeeId || "",
-        email: match.email || "",
-        class: match.class || match.department || "",
-        section: match.section || match.designation || "",
-        role: match.role,
-        photo: match.photo,
-        matched: true,
-        confidence,
-        timestamp: new Date().toLocaleTimeString(),
-      };
-    }
-
-    // No match found
-    return {
-      id: "",
-      firstName: "",
-      lastName: "",
-      rollNo: "",
-      email: "",
-      class: "",
-      section: "",
-      role: "student",
-      matched: false,
-      confidence: 0,
-      timestamp: new Date().toLocaleTimeString(),
-    };
-  } catch (error) {
-    console.error("Error in face recognition:", error);
-    throw error;
-  }
-};
-
-// Verify if a person's face matches a specific ID
-export const verifyFaceMatch = async (
-  videoElement: HTMLVideoElement,
-  userId: string,
-  userRole: "student" | "teacher"
-): Promise<boolean> => {
-  try {
-    if (!modelsLoaded) {
-      await loadFaceApiModels();
-    }
-
-    const capturedDescriptor = await captureFaceDescriptor(videoElement);
-    if (!capturedDescriptor) {
-      return false;
-    }
-
-    const collection_name =
-      userRole === "student" ? STUDENTS_COLLECTION : TEACHERS_COLLECTION;
-    const userDoc = await getDocs(
-      query(collection(db, collection_name), where("id", "==", userId))
-    );
-
-    if (userDoc.empty) {
-      return false;
-    }
-
-    const userData = userDoc.docs[0].data();
-    if (!userData.photo) {
-      return false;
-    }
-
-    const storedDescriptor = await getFaceDescriptorFromUrl(userData.photo);
-    if (!storedDescriptor) {
-      return false;
-    }
-
-    const distance = calculateDistance(capturedDescriptor, storedDescriptor);
-    const confidence = Math.max(0, 1 - distance / 1.5);
-
-    return confidence >= MIN_CONFIDENCE_THRESHOLD;
-  } catch (error) {
-    console.error("Error verifying face match:", error);
+    console.error('[ERROR] Python API not available:', error);
     return false;
   }
 };
+
