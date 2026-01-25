@@ -13,6 +13,7 @@ import AttendanceResult from "../pages/admin/AttendanceResult";
 import ManageClasses from "../pages/admin/ManageClasses";
 import ManageSubjects from "../pages/admin/ManageSubjects";
 import FaceRecognition from "../pages/admin/FaceRecognition";
+import AdminSettings from "../pages/admin/AdminSettings";
 import HomePage from "../pages/user/HomePage";
 import ProtectedLayout from "../components/ProtectedRoute";
 
@@ -50,6 +51,7 @@ export const router = createBrowserRouter([
       { path: "manage-classes", Component: ManageClasses },
       { path: "manage-subjects", Component: ManageSubjects },
       { path: "face-recognition", Component: FaceRecognition },
+      { path: "settings", Component: AdminSettings },
     ],
   },
   {
