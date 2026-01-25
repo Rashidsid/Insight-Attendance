@@ -1,9 +1,55 @@
 // Email service for sending professional notifications
-import { httpsCallable } from 'firebase/functions';
-import { functions } from '../config/firebase';
+// Using Brevo SMTP API - Free and allows individual recipients
 
-// Initialize Firebase Cloud Function
-const sendEmailFunction = httpsCallable(functions, 'sendEmail');
+// Brevo configuration (Free tier: 300 emails/day)
+const BREVO_API_KEY = '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';
+const BREVO_SENDER_EMAIL = 'rashidzayn11@gmail.com';
+const BREVO_SENDER_NAME = 'Insight Attendance System';
+
+// Function to send email via Brevo API
+const sendEmailViaBrevo = async (to: string, subject: string, html: string): Promise<boolean> => {
+  try {
+    console.log('[EMAIL] Sending professional email via Brevo to:', to);
+    
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': BREVO_API_KEY,
+      },
+      body: JSON.stringify({
+        sender: {
+          name: BREVO_SENDER_NAME,
+          email: BREVO_SENDER_EMAIL,
+        },
+        to: [
+          {
+            email: to,
+            name: 'Recipient',
+          }
+        ],
+        subject: subject,
+        htmlContent: html,
+        replyTo: {
+          email: BREVO_SENDER_EMAIL,
+          name: BREVO_SENDER_NAME,
+        }
+      })
+    });
+
+    if (response.ok || response.status === 201) {
+      console.log('[EMAIL] ✅ Email sent successfully via Brevo!');
+      return true;
+    } else {
+      const error = await response.json();
+      console.warn('[EMAIL] Brevo response error:', error);
+      return false;
+    }
+  } catch (error) {
+    console.warn('[EMAIL] Brevo API call failed:', error);
+    return false;
+  }
+};
 
 interface StudentEmailData {
   email: string;
@@ -33,34 +79,31 @@ interface EmailResult {
 
 export const notifyStudentCreated = async (data: StudentEmailData): Promise<EmailResult> => {
   try {
+    console.log('[EMAIL] Preparing to send student welcome email to:', data.email);
+    
     const htmlContent = generateStudentWelcomeHTML(data);
     
-    // Try Firebase Cloud Function first
-    try {
-      const result = await sendEmailFunction({
-        to: data.email,
-        subject: `Welcome to ${data.instituteName}!`,
-        html: htmlContent,
-        type: 'student',
-        studentName: `${data.firstName} ${data.lastName}`,
-        rollNumber: data.rollNo,
-        class: data.class,
-        section: data.section,
-        instituteName: data.instituteName,
-      });
+    // Try to send via Brevo API
+    const emailSent = await sendEmailViaBrevo(
+      data.email,
+      `Welcome to ${data.instituteName}! - Roll Number: ${data.rollNo}`,
+      htmlContent
+    );
 
-      console.log('Student welcome email sent via Firebase:', result);
-      return { success: true, method: 'firebase' };
-    } catch (firebaseError) {
-      console.warn('Firebase email failed, trying alternative method:', firebaseError);
+    if (emailSent) {
+      console.log('[EMAIL] ✅ Student welcome email sent successfully!');
+      return { success: true, method: 'brevo', stored: true };
+    } else {
+      console.log('[EMAIL] Brevo failed, trying localStorage backup');
       
-      // Fallback: Try direct email API or store for manual sending
+      // Fallback: Store in localStorage
       const emailPayload = {
         to: data.email,
         subject: `Welcome to ${data.instituteName}!`,
         html: htmlContent,
         type: 'student',
         timestamp: new Date().toISOString(),
+        status: 'pending',
         data: {
           firstName: data.firstName,
           lastName: data.lastName,
@@ -71,51 +114,46 @@ export const notifyStudentCreated = async (data: StudentEmailData): Promise<Emai
         }
       };
       
-      // Log the email payload for debugging
-      console.log('Email payload (fallback):', emailPayload);
-      
-      // Optionally store in localStorage for reference
       const pendingEmails = JSON.parse(localStorage.getItem('pendingEmails') || '[]');
       pendingEmails.push(emailPayload);
       localStorage.setItem('pendingEmails', JSON.stringify(pendingEmails));
       
-      return { success: true, method: 'fallback', stored: true };
+      console.log('[EMAIL] Email stored in localStorage as backup');
+      return { success: true, method: 'localStorage', stored: true };
     }
   } catch (error) {
-    console.error('Error sending student welcome email:', error);
+    console.error('[EMAIL] Error sending student welcome email:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 };
 
 export const notifyTeacherCreated = async (data: TeacherEmailData): Promise<EmailResult> => {
   try {
+    console.log('[EMAIL] Preparing to send teacher welcome email to:', data.email);
+    
     const htmlContent = generateTeacherWelcomeHTML(data);
     
-    // Try Firebase Cloud Function first
-    try {
-      const result = await sendEmailFunction({
-        to: data.email,
-        subject: `Welcome to ${data.instituteName}!`,
-        html: htmlContent,
-        type: 'teacher',
-        teacherName: `${data.firstName} ${data.lastName}`,
-        teacherId: data.teacherId,
-        teacherSubject: data.subject,
-        instituteName: data.instituteName,
-      });
+    // Try to send via Brevo API
+    const emailSent = await sendEmailViaBrevo(
+      data.email,
+      `Welcome to ${data.instituteName}! - Teacher ID: ${data.teacherId}`,
+      htmlContent
+    );
 
-      console.log('Teacher welcome email sent via Firebase:', result);
-      return { success: true, method: 'firebase' };
-    } catch (firebaseError) {
-      console.warn('Firebase email failed, trying alternative method:', firebaseError);
+    if (emailSent) {
+      console.log('[EMAIL] ✅ Teacher welcome email sent successfully!');
+      return { success: true, method: 'brevo', stored: true };
+    } else {
+      console.log('[EMAIL] Brevo failed, trying localStorage backup');
       
-      // Fallback: Store email for manual sending or alternative delivery
+      // Fallback: Store in localStorage
       const emailPayload = {
         to: data.email,
         subject: `Welcome to ${data.instituteName}!`,
         html: htmlContent,
         type: 'teacher',
         timestamp: new Date().toISOString(),
+        status: 'pending',
         data: {
           firstName: data.firstName,
           lastName: data.lastName,
@@ -125,22 +163,20 @@ export const notifyTeacherCreated = async (data: TeacherEmailData): Promise<Emai
         }
       };
       
-      console.log('Email payload (fallback):', emailPayload);
-      
-      // Store in localStorage for reference
       const pendingEmails = JSON.parse(localStorage.getItem('pendingEmails') || '[]');
       pendingEmails.push(emailPayload);
       localStorage.setItem('pendingEmails', JSON.stringify(pendingEmails));
       
-      return { success: true, method: 'fallback', stored: true };
+      console.log('[EMAIL] Email stored in localStorage as backup');
+      return { success: true, method: 'localStorage', stored: true };
     }
   } catch (error) {
-    console.error('Error sending teacher welcome email:', error);
+    console.error('[EMAIL] Error sending teacher welcome email:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 };
 
-// Fallback: Generate professional HTML email template (for client-side)
+// Generate professional HTML email templates
 export const generateStudentWelcomeHTML = (data: StudentEmailData): string => {
   return `
     <!DOCTYPE html>
