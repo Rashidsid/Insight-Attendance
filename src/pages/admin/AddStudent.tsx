@@ -7,12 +7,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTheme } from '../../contexts/ThemeContext';
 import { addStudent } from '../../services/studentService';
 import { getUniqueClassNames, getSectionsForClass } from '../../services/classService';
 import { notifyStudentCreated } from '../../services/emailService';
+import { enrollStudentFace } from '../../services/faceRecognitionService';
 
 export default function AddStudent() {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [classNames, setClassNames] = useState<string[]>([]);
   const [sections, setSections] = useState<string[]>([]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -87,6 +90,21 @@ export default function AddStudent() {
 
       // Add student to Firebase
       await addStudent(newStudent as any);
+      
+      // Enroll face in Python API if photo is provided
+      if (photoPreview && formData.rollNo) {
+        try {
+          console.log('[DEBUG] Starting face enrollment for:', formData.rollNo);
+          console.log('[DEBUG] Photo preview length:', photoPreview.length);
+          const enrollResult = await enrollStudentFace(formData.rollNo, photoPreview);
+          console.log('[DEBUG] Enrollment result:', enrollResult);
+          toast.success('Face enrolled for recognition!');
+        } catch (error) {
+          console.error('Warning: Could not enroll face in Python API:', error);
+          // Don't fail the student creation if face enrollment fails
+          toast.warning('Student added but face enrollment failed. Please check Python API status.');
+        }
+      }
       
       // Send welcome email notification
       if (formData.email && formData.email.trim()) {
@@ -187,8 +205,11 @@ export default function AddStudent() {
                   <img src={photoPreview} alt="Student preview" className="w-full h-full object-cover" />
                 ) : (
                   <div className="flex flex-col items-center justify-center">
-                    <div className="w-16 h-16 bg-[#E7D7F6] rounded-full flex items-center justify-center mb-4">
-                      <Upload className="w-8 h-8 text-[#A982D9]" />
+                    <div 
+                      className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+                      style={{ backgroundColor: theme.sidebarBg }}
+                    >
+                      <Upload className="w-8 h-8" style={{ color: theme.primaryColor }} />
                     </div>
                     <p className="text-sm text-gray-600 mb-2">Upload student photo</p>
                     <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
@@ -307,7 +328,8 @@ export default function AddStudent() {
                           <button
                             type="button"
                             onClick={() => navigate('/admin/manage-classes')}
-                            className="text-[#A982D9] hover:underline block mt-1"
+                            className="hover:underline block mt-1"
+                            style={{ color: theme.primaryColor }}
                           >
                             Add classes here
                           </button>
@@ -452,7 +474,8 @@ export default function AddStudent() {
               </Button>
               <Button
                 type="submit"
-                className="flex-1 h-12 rounded-xl bg-[#A982D9] hover:bg-[#9770C8]"
+                style={{ backgroundColor: theme.primaryColor }}
+                className="flex-1 h-12 rounded-xl hover:opacity-90"
                 disabled={loading}
               >
                 {loading ? 'Adding...' : 'Add Student'}
