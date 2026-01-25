@@ -4,10 +4,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Download, Calendar, FileText } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
+import { useTheme } from '../../contexts/ThemeContext';
 import { getAllAttendance, calculateAttendanceStats } from '../../services/attendanceService';
 import AttendanceWidget from '../../components/AttendanceWidget';
 
 export default function Reports() {
+  const { theme } = useTheme();
   const [selectedRole, setSelectedRole] = useState('all');
   const [selectedClass, setSelectedClass] = useState('all');
   const [selectedMonth, setSelectedMonth] = useState('current');
@@ -137,20 +139,20 @@ export default function Reports() {
         <title>${reportType} - Attendance Report</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
-          .header { text-align: center; margin-bottom: 40px; border-bottom: 3px solid #A982D9; padding-bottom: 20px; }
-          .header h1 { color: #A982D9; margin: 0; font-size: 32px; }
+          .header { text-align: center; margin-bottom: 40px; border-bottom: 3px solid ${theme.primaryColor}; padding-bottom: 20px; }
+          .header h1 { color: ${theme.primaryColor}; margin: 0; font-size: 32px; }
           .header p { color: #666; margin: 10px 0 0 0; }
           .info-row { display: flex; justify-content: space-between; margin-bottom: 30px; }
           .info-box { background: #f8f9fa; padding: 15px; border-radius: 8px; flex: 1; margin: 0 10px; }
           .info-box h3 { margin: 0 0 5px 0; font-size: 14px; color: #666; }
-          .info-box p { margin: 0; font-size: 24px; color: #A982D9; font-weight: bold; }
+          .info-box p { margin: 0; font-size: 24px; color: ${theme.primaryColor}; font-weight: bold; }
           .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px; }
           .stat-card { background: white; border: 2px solid #e5e7eb; padding: 20px; border-radius: 12px; }
           .stat-card h4 { margin: 0 0 10px 0; color: #666; font-size: 14px; }
           .stat-card .value { font-size: 28px; color: #333; font-weight: bold; }
           .stat-card .change { font-size: 12px; color: #22c55e; margin-top: 5px; }
           table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th { background: #A982D9; color: white; padding: 12px; text-align: left; }
+          th { background: ${theme.primaryColor}; color: white; padding: 12px; text-align: left; }
           td { padding: 12px; border-bottom: 1px solid #e5e7eb; }
           tr:nth-child(even) { background: #f9fafb; }
           .footer { margin-top: 40px; text-align: center; color: #666; font-size: 12px; border-top: 1px solid #e5e7eb; padding-top: 20px; }
@@ -201,7 +203,7 @@ export default function Reports() {
           </div>
         </div>
 
-        <h2 style="color: #A982D9; margin-top: 40px;">Class-wise Attendance Breakdown</h2>
+        <h2 style="color: ${theme.primaryColor}; margin-top: 40px;">Class-wise Attendance Breakdown</h2>
         <table>
           <thead>
             <tr>
@@ -232,7 +234,7 @@ export default function Reports() {
       {loading ? (
         <div className="flex items-center justify-center h-96">
           <div className="text-center">
-            <div className="w-12 h-12 border-4 border-[#A982D9] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <div className="w-12 h-12 rounded-full animate-spin mx-auto mb-4" style={{ borderWidth: '4px', borderStyle: 'solid', borderColor: theme.primaryColor, borderTopColor: 'transparent' }}></div>
             <p className="text-gray-600">Loading attendance data...</p>
           </div>
         </div>
@@ -304,7 +306,7 @@ export default function Reports() {
                   URL.revokeObjectURL(url);
                   toast.success('Report exported successfully!');
                 }}
-                className="bg-[#A982D9] hover:bg-[#9770C8] rounded-xl h-12 gap-2"
+                style={{ backgroundColor: theme.primaryColor }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.sidebarAccent} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = theme.primaryColor} className="rounded-xl h-12 gap-2"
               >
                 <Download className="w-5 h-5" />
                 Export HTML
@@ -334,7 +336,7 @@ export default function Reports() {
                     <Line
                       type="monotone"
                       dataKey="percentage"
-                      stroke="#A982D9"
+                      stroke={theme.primaryColor}
                       strokeWidth={3}
                       name="Attendance %"
                     />
@@ -358,7 +360,7 @@ export default function Reports() {
                     <XAxis dataKey="class" stroke="#888" />
                     <YAxis stroke="#888" />
                     <Tooltip />
-                    <Bar dataKey="attendance" fill="#A982D9" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="attendance" fill={theme.primaryColor} radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
