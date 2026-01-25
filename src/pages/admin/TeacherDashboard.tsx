@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Label } from '../../components/ui/label';
 import { Edit, Trash2, Eye, UserPlus, Search, X } from 'lucide-react';
 import { useSearch } from '../../contexts/SearchContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -40,6 +41,7 @@ export default function TeacherDashboard() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [localSearch, setLocalSearch] = useState('');
+  const [filterSubject, setFilterSubject] = useState('all');
 
   // Load teachers from Firebase
   useEffect(() => {
@@ -133,8 +135,14 @@ export default function TeacherDashboard() {
       teacher.subject.toLowerCase().includes(localQuery) ||
       teacher.classes.toLowerCase().includes(localQuery);
     
-    return matchesGlobal && matchesLocal;
+    // Filter by subject
+    const matchesSubject = filterSubject === 'all' || teacher.subject === filterSubject;
+    
+    return matchesGlobal && matchesLocal && matchesSubject;
   });
+
+  // Get unique subjects for filter dropdown
+  const uniqueSubjects = [...new Set(teachers.map(t => t.subject))].sort();
 
   if (loading) {
     return (
@@ -194,6 +202,24 @@ export default function TeacherDashboard() {
             <p className="text-3xl">{stat.value}</p>
           </div>
         ))}
+      </div>
+
+      {/* Filter Controls - Below Stats on Right Side */}
+      <div className="flex justify-end gap-4 mb-6">
+        <div className="max-w-xs">
+          <Label className="text-sm text-gray-600 mb-2 block">Filter by Subject</Label>
+          <Select value={filterSubject} onValueChange={setFilterSubject}>
+            <SelectTrigger className="h-10 rounded-lg border-gray-300">
+              <SelectValue placeholder="All Subjects" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Subjects</SelectItem>
+              {uniqueSubjects.map(subject => (
+                <SelectItem key={subject} value={subject}>{subject}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Teachers Table */}
