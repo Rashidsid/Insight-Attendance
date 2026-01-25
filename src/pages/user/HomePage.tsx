@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { Camera, UserCircle, AlertCircle, CheckCircle } from 'lucide-react';
-import { recognizeFaceFromVideo, loadFaceApiModels } from '../../services/faceRecognitionService';
+import { useTheme } from '../../contexts/ThemeContext';
+import { 
+  recognizeFaceFromVideo,
+  checkPythonAPIAvailability
+} from '../../services/faceRecognitionService';
+import { markAttendanceViaFaceRecognition } from '../../services/attendanceService';
 
 interface RecognitionResult {
   id: string;
@@ -18,6 +23,7 @@ interface RecognitionResult {
 }
 
 export default function HomePage() {
+  const { theme } = useTheme();
   const [cameraActive, setCameraActive] = useState(false);
   const [recognitionResult, setRecognitionResult] = useState<RecognitionResult | null>(null);
   const [isRecognizing, setIsRecognizing] = useState(false);
@@ -27,26 +33,26 @@ export default function HomePage() {
   const streamRef = useRef<MediaStream | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Load face-api models on component mount
+  // Check Python API availability on component mount
   useEffect(() => {
-    const initModels = async () => {
+    const checkAPI = async () => {
       try {
-        console.log('Initializing face recognition...');
-        await loadFaceApiModels();
-        console.log('✓ Face-api models loaded successfully');
+        console.log('Checking Python Face API availability...');
+        const isAvailable = await checkPythonAPIAvailability();
+        if (!isAvailable) {
+          setError('Python Face API is not running. Please start the Python API server at localhost:5000');
+          console.warn('Python API not available');
+        } else {
+          console.log('✓ Python Face API is available');
+        }
       } catch (err) {
-        console.error('Failed to load models:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load face recognition models');
+        console.error('Failed to check API:', err);
       }
     };
     
-    // Wait a bit for the CDN script to load
-    const timer = setTimeout(() => {
-      initModels();
-    }, 1000);
+    checkAPI();
     
     return () => {
-      clearTimeout(timer);
       stopCamera();
     };
   }, []);
@@ -93,39 +99,18 @@ export default function HomePage() {
   const startFaceDetection = () => {
     if (!videoRef.current) return;
     
-    // Use face-api for real face detection
-    const detectFaces = async () => {
+    // Simple face detection - check if video is properly playing
+    // Python API will handle actual face detection and recognition
+    const checkVideo = () => {
       if (!videoRef.current) return;
       
-      try {
-        // Check if face-api is loaded globally
-        if (typeof (window as any).faceapi === 'undefined') {
-          return;
-        }
-        
-        const faceapi = (window as any).faceapi;
-        
-        // Check if models are loaded
-        if (!faceapi.nets || !faceapi.nets.tinyFaceDetector || !faceapi.nets.tinyFaceDetector.params) {
-          return;
-        }
-        
-        // Detect faces
-        const detections = await faceapi.detectAllFaces(
-          videoRef.current,
-          new faceapi.TinyFaceDetectorOptions()
-        );
-        
-        // Set face detected if we found at least one face
-        setFaceDetected(detections && detections.length > 0);
-      } catch (err) {
-        // Silently handle errors during detection loop
-        setFaceDetected(false);
-      }
+      // Check if video has data and is playing
+      const isPlaying = videoRef.current.currentTime > 0 && !videoRef.current.paused;
+      setFaceDetected(isPlaying);
     };
 
-    // Check for faces every 500ms
-    const interval = setInterval(detectFaces, 500);
+    // Check video status every 500ms
+    const interval = setInterval(checkVideo, 500);
     
     // Clean up on camera stop
     return () => clearInterval(interval);
@@ -143,8 +128,8 @@ export default function HomePage() {
   };
 
   const recognizeFace = async () => {
-    if (!faceDetected) {
-      setError('No face detected. Please ensure your face is visible.');
+    if (!cameraActive) {
+      setError('Camera is not active. Please activate the camera first.');
       return;
     }
 
@@ -157,17 +142,17 @@ export default function HomePage() {
     setError(null);
 
     try {
-      // Make sure models are loaded before trying to recognize
-      const faceapi = (window as any).faceapi;
-      if (!faceapi || !faceapi.nets || !faceapi.nets.tinyFaceDetector || !faceapi.nets.tinyFaceDetector.params) {
-        throw new Error('Face-API models are still loading. Please wait a moment and try again.');
+      // Check if Python API is available
+      const isAPIAvailable = await checkPythonAPIAvailability();
+      if (!isAPIAvailable) {
+        throw new Error('Python Face API is not running. Please start the API server at localhost:5000');
       }
 
       const result = await recognizeFaceFromVideo(videoRef.current);
       
-      if (result) {
+      if (result && result.matched) {
         setRecognitionResult({
-          id: result.rollNo,
+          id: result.id,
           firstName: result.firstName,
           lastName: result.lastName,
           rollNo: result.rollNo,
@@ -180,6 +165,41 @@ export default function HomePage() {
           confidence: result.confidence,
           timestamp: result.timestamp
         });
+
+        // Mark attendance for recognized person
+        try {
+          const attendanceResult = await markAttendanceViaFaceRecognition(
+            result.id,
+            `${result.firstName} ${result.lastName}`,
+            result.class,
+            result.confidence
+          );
+
+          if (attendanceResult.success) {
+            console.log('✓ Attendance marked:', attendanceResult.message);
+          } else {
+            console.warn('⚠ Attendance marking:', attendanceResult.message);
+          }
+        } catch (attendanceError) {
+          console.error('Error marking attendance:', attendanceError);
+        }
+      } else if (result) {
+        setRecognitionResult({
+          id: result.id,
+          firstName: result.firstName,
+          lastName: result.lastName,
+          rollNo: result.rollNo,
+          email: result.email,
+          class: result.class,
+          section: result.section,
+          role: result.role,
+          photo: result.photo,
+          matched: result.matched,
+          confidence: result.confidence,
+          timestamp: result.timestamp
+        });
+      } else {
+        setError('Failed to process face recognition');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Face recognition failed';
@@ -235,7 +255,10 @@ export default function HomePage() {
                   onClick={activateCamera}
                   className="w-full h-full flex flex-col items-center justify-center gap-4 hover:bg-slate-700/50 transition-colors group"
                 >
-                  <UserCircle className="w-32 h-32 text-slate-400 group-hover:text-[#A982D9] transition-colors" />
+                  <UserCircle 
+                    className="w-32 h-32 text-slate-400 group-hover:transition-colors"
+                    style={{ color: faceDetected ? theme.primaryColor : undefined }}
+                  />
                   <span className="text-slate-300 flex items-center gap-2">
                     <Camera className="w-5 h-5" />
                     Click to activate camera
@@ -261,7 +284,10 @@ export default function HomePage() {
                   {isRecognizing && (
                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-sm">
                       <div className="text-center">
-                        <div className="w-16 h-16 border-4 border-[#A982D9] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                        <div 
+                          className="w-16 h-16 border-4 border-t-transparent rounded-full animate-spin mx-auto mb-4"
+                          style={{ borderColor: `${theme.primaryColor}40`, borderTopColor: 'transparent' }}
+                        ></div>
                         <p className="text-white text-lg font-semibold">Analyzing Face...</p>
                         <p className="text-slate-300 text-sm mt-2">Matching with database</p>
                       </div>
@@ -274,36 +300,50 @@ export default function HomePage() {
                       <div
                         className={`relative w-48 h-64 border-4 rounded-lg transition-all duration-300 ${
                           faceDetected
-                            ? 'border-[#A982D9] shadow-[0_0_30px_rgba(169,130,217,0.6)]'
-                            : 'border-slate-500 opacity-50'
+                            ? 'shadow-[0_0_30px_rgba(169,130,217,0.6)]'
+                            : 'opacity-50'
                         }`}
+                        style={{
+                          borderColor: faceDetected ? theme.primaryColor : '#64748b'
+                        }}
                       >
                         {/* Corner Brackets */}
                         <div
-                          className={`absolute -top-2 -left-2 w-6 h-6 border-t-4 border-l-4 transition-colors ${
-                            faceDetected ? 'border-[#A982D9]' : 'border-slate-500'
-                          }`}
+                          className="absolute -top-2 -left-2 w-6 h-6 border-t-4 border-l-4 transition-colors"
+                          style={{
+                            borderTopColor: faceDetected ? theme.primaryColor : '#64748b',
+                            borderLeftColor: faceDetected ? theme.primaryColor : '#64748b'
+                          }}
                         ></div>
                         <div
-                          className={`absolute -top-2 -right-2 w-6 h-6 border-t-4 border-r-4 transition-colors ${
-                            faceDetected ? 'border-[#A982D9]' : 'border-slate-500'
-                          }`}
+                          className="absolute -top-2 -right-2 w-6 h-6 border-t-4 border-r-4 transition-colors"
+                          style={{
+                            borderTopColor: faceDetected ? theme.primaryColor : '#64748b',
+                            borderRightColor: faceDetected ? theme.primaryColor : '#64748b'
+                          }}
                         ></div>
                         <div
-                          className={`absolute -bottom-2 -left-2 w-6 h-6 border-b-4 border-l-4 transition-colors ${
-                            faceDetected ? 'border-[#A982D9]' : 'border-slate-500'
-                          }`}
+                          className="absolute -bottom-2 -left-2 w-6 h-6 border-b-4 border-l-4 transition-colors"
+                          style={{
+                            borderBottomColor: faceDetected ? theme.primaryColor : '#64748b',
+                            borderLeftColor: faceDetected ? theme.primaryColor : '#64748b'
+                          }}
                         ></div>
                         <div
-                          className={`absolute -bottom-2 -right-2 w-6 h-6 border-b-4 border-r-4 transition-colors ${
-                            faceDetected ? 'border-[#A982D9]' : 'border-slate-500'
-                          }`}
+                          className="absolute -bottom-2 -right-2 w-6 h-6 border-b-4 border-r-4 transition-colors"
+                          style={{
+                            borderBottomColor: faceDetected ? theme.primaryColor : '#64748b',
+                            borderRightColor: faceDetected ? theme.primaryColor : '#64748b'
+                          }}
                         ></div>
 
                         {/* Face Detected Indicator */}
                         {faceDetected && (
                           <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap">
-                            <span className="px-3 py-1 bg-[#A982D9] text-white text-xs font-semibold rounded-full">
+                            <span 
+                              className="px-3 py-1 text-white text-xs font-semibold rounded-full"
+                              style={{ backgroundColor: theme.primaryColor }}
+                            >
                               Face Detected ✓
                             </span>
                           </div>
@@ -319,7 +359,7 @@ export default function HomePage() {
             <div className="flex gap-4 w-full max-w-md">
               <button
                 onClick={recognizeFace}
-                disabled={!cameraActive || !faceDetected || isRecognizing}
+                disabled={!cameraActive || isRecognizing}
                 className="flex-1 px-8 py-4 bg-gradient-to-r from-slate-200 to-white text-slate-900 rounded-full shadow-lg hover:shadow-xl transform hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none font-semibold text-lg"
               >
                 {isRecognizing ? 'Processing...' : 'Recognize Face'}
@@ -353,7 +393,12 @@ export default function HomePage() {
               <h1 className="text-5xl font-bold text-white mb-2 leading-tight">
                 Insight Attendance
                 <br />
-                <span className="bg-gradient-to-r from-[#A982D9] to-blue-400 bg-clip-text text-transparent">
+                <span 
+                  className="bg-clip-text text-transparent"
+                  style={{ 
+                    backgroundImage: `linear-gradient(to right, ${theme.primaryColor}, #60a5fa)`
+                  }}
+                >
                   System
                 </span>
               </h1>
@@ -369,7 +414,10 @@ export default function HomePage() {
                 </label>
                 <div className="bg-slate-800/70 rounded-lg p-4 border border-slate-700 backdrop-blur-sm">
                   {recognitionResult?.matched ? (
-                    <p className="text-[#A982D9] text-2xl font-bold">{recognitionResult.id}</p>
+                    <p 
+                      className="text-2xl font-bold"
+                      style={{ color: theme.primaryColor }}
+                    >{recognitionResult.id}</p>
                   ) : recognitionResult && !recognitionResult.matched ? (
                     <p className="text-slate-500 text-lg">-- Not Recognized --</p>
                   ) : (
@@ -385,7 +433,10 @@ export default function HomePage() {
                 </label>
                 <div className="bg-slate-800/70 rounded-lg p-4 border border-slate-700 backdrop-blur-sm">
                   {recognitionResult?.matched ? (
-                    <p className="text-[#A982D9] text-2xl font-bold">
+                    <p 
+                      className="text-2xl font-bold"
+                      style={{ color: theme.primaryColor }}
+                    >
                       {recognitionResult.firstName} {recognitionResult.lastName}
                     </p>
                   ) : recognitionResult && !recognitionResult.matched ? (
@@ -403,7 +454,10 @@ export default function HomePage() {
                     Role
                   </label>
                   <div className="bg-slate-800/70 rounded-lg p-4 border border-slate-700 backdrop-blur-sm">
-                    <p className="text-[#A982D9] text-lg font-semibold capitalize">
+                    <p 
+                      className="text-lg font-semibold capitalize"
+                      style={{ color: theme.primaryColor }}
+                    >
                       {recognitionResult.role}
                     </p>
                   </div>
@@ -451,7 +505,8 @@ export default function HomePage() {
               {recognitionResult && !recognitionResult.matched && (
                 <button
                   onClick={resetRecognition}
-                  className="w-full px-6 py-3 bg-[#A982D9] hover:bg-[#9771C8] text-white rounded-lg transition-colors font-semibold mt-4 transform hover:scale-105"
+                  className="w-full px-6 py-3 text-white rounded-lg transition-colors font-semibold mt-4 transform hover:scale-105 hover:opacity-90"
+                  style={{ backgroundColor: theme.primaryColor }}
                 >
                   Try Again
                 </button>
@@ -462,7 +517,10 @@ export default function HomePage() {
       </div>
 
       {/* Decorative Glows */}
-      <div className="absolute top-20 right-20 w-64 h-64 bg-[#A982D9]/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div 
+        className="absolute top-20 right-20 w-64 h-64 rounded-full blur-3xl pointer-events-none"
+        style={{ backgroundColor: `${theme.primaryColor}10` }}
+      ></div>
       <div className="absolute bottom-20 left-20 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
       {/* Hidden Canvas for face capture (for future use) */}
