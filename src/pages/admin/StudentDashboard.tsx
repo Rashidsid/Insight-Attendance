@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Edit, Trash2, Eye, UserPlus, Search, X } from 'lucide-react';
 import { useSearch } from '../../contexts/SearchContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { toast } from 'sonner';
 import { getAllStudents, deleteStudent } from '../../services/studentService';
 import {
@@ -33,6 +34,7 @@ interface Student {
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const { searchQuery } = useSearch();
+  const { theme } = useTheme();
   const [students, setStudents] = useState<Student[]>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,7 +74,7 @@ export default function StudentDashboard() {
     { label: 'Total Students', value: students.length.toString(), color: 'bg-blue-500' },
     { label: 'Active Today', value: students.filter(s => s.status === 'Active').length.toString(), color: 'bg-green-500' },
     { label: 'Inactive', value: students.filter(s => s.status === 'Inactive').length.toString(), color: 'bg-red-500' },
-    { label: 'Total Classes', value: new Set(students.map(s => s.class)).size.toString(), color: 'bg-[#A982D9]' },
+    { label: 'Total Classes', value: new Set(students.map(s => s.class)).size.toString(), color: `var(--primary-color)` },
   ];
 
   const handleDelete = async () => {
@@ -130,7 +132,8 @@ export default function StudentDashboard() {
         </div>
         <Button
           onClick={() => navigate('/admin/students/add')}
-          className="bg-[#A982D9] hover:bg-[#9770C8] rounded-xl h-12 gap-2"
+          style={{ backgroundColor: theme.primaryColor }}
+          className="hover:opacity-90 rounded-xl h-12 gap-2"
         >
           <UserPlus className="w-5 h-5" />
           Add New Student
@@ -174,7 +177,7 @@ export default function StudentDashboard() {
       {/* Students Table */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         {/* Table Header */}
-        <div className="bg-[#A982D9] text-white h-[60px] px-6 flex items-center">
+        <div style={{ backgroundColor: theme.primaryColor }} className="text-white h-[60px] px-6 flex items-center">
           <div className="flex-1 grid grid-cols-7 gap-4">
             <div className="col-span-1">Roll No</div>
             <div className="col-span-2">Student Name</div>
@@ -203,7 +206,10 @@ export default function StudentDashboard() {
                   <div className="col-span-1 text-gray-900 font-medium">{student.rollNo}</div>
                   <div className="col-span-2">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-[#E7D7F6] text-[#A982D9] font-semibold text-sm overflow-hidden">
+                      <div 
+                        className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center font-semibold text-sm overflow-hidden"
+                        style={{ backgroundColor: theme.sidebarBg, color: theme.primaryColor }}
+                      >
                         {student.photo ? (
                           <img src={student.photo} alt={student.name} className="w-full h-full object-cover" />
                         ) : (
