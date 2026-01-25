@@ -26,6 +26,11 @@
     --input: 0 0% 89.8%;
     --ring: 259.6 75.4% 65.1%;
     --radius: 0.5rem;
+    /* Dynamic theme colors */
+    --sidebar-bg: #E7D7F6;
+    --sidebar-accent: #A982D9;
+    --button-hover-bg: rgba(255, 255, 255, 0.5);
+    --primary-color: #A982D9;
   }
 
   .dark {
