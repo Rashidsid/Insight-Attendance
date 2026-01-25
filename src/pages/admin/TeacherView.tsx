@@ -6,6 +6,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { ArrowLeft, Mail, Download, Phone, MapPin, Calendar, User, Award, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTheme } from '../../contexts/ThemeContext';
 import { generateTeacherReport, downloadReport } from '../../utils/reportGenerator';
 import { getTeacherById, updateTeacherStatus, updateTeacherAttendance } from '../../services/teacherService';
 
@@ -34,6 +35,7 @@ interface TeacherData extends ReturnType<typeof getDefaultTeacherData> {}
 
 export default function TeacherView() {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const { id } = useParams();
   const [isSharing, setIsSharing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -241,7 +243,10 @@ export default function TeacherView() {
     <div className="p-8">
       {loading ? (
         <div className="flex items-center justify-center h-96">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#A982D9]"></div>
+          <div 
+            className="animate-spin rounded-full h-12 w-12 border-b-2"
+            style={{ borderBottomColor: theme.primaryColor }}
+          ></div>
         </div>
       ) : (
         <>
@@ -275,7 +280,8 @@ export default function TeacherView() {
               <Button
                 onClick={handleShareReport}
                 disabled={isSharing}
-                className="bg-[#A982D9] hover:bg-[#9770C8] rounded-xl h-12 gap-2"
+                style={{ backgroundColor: theme.primaryColor }}
+                className="hover:opacity-90 rounded-xl h-12 gap-2"
               >
                 <Mail className="w-5 h-5" />
                 {isSharing ? 'Sending...' : 'Share Report'}
@@ -287,7 +293,12 @@ export default function TeacherView() {
             {/* Left Column - Teacher Profile */}
             <div className="col-span-1 space-y-6">
               {/* Profile Card */}
-              <div className="bg-gradient-to-br from-[#A982D9] to-[#8B5FBF] rounded-2xl p-6 text-white">
+              <div 
+                className="rounded-2xl p-6 text-white"
+                style={{
+                  backgroundImage: `linear-gradient(to bottom right, ${theme.primaryColor}, ${theme.sidebarAccent})`
+                }}
+              >
                 <div className="flex flex-col items-center text-center">
                   <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center text-5xl backdrop-blur-sm mb-4 overflow-hidden flex-shrink-0">
                     {teacherData.photo ? (
