@@ -8,6 +8,7 @@ import {
   doc,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
+import { uploadToCloudinary } from "../config/cloudinary";
 
 // Interfaces
 export interface Teacher {
@@ -27,6 +28,13 @@ export interface Teacher {
   joiningDate: string;
   status: "Active" | "On Leave";
   photo?: string | null;
+  faceImages?: {
+    front?: string | null;
+    left?: string | null;
+    right?: string | null;
+    up?: string | null;
+    down?: string | null;
+  } | null;
   recentAttendance?: AttendanceRecord[];
   createdAt?: Date;
   updatedAt?: Date;
@@ -39,6 +47,26 @@ export interface AttendanceRecord {
 }
 
 const COLLECTION_NAME = "teachers";
+
+// Upload image to Cloudinary and return download URL
+export const uploadTeacherImage = async (
+  teacherId: string,
+  imageBase64: string,
+  imageType: 'photo' | 'front' | 'left' | 'right' | 'up' | 'down'
+): Promise<string> => {
+  try {
+    const imageName = `teacher-${teacherId}-${imageType}-${Date.now()}`;
+    console.log(`[uploadTeacherImage] Uploading ${imageType} for teacher ${teacherId}`);
+    
+    const downloadURL = await uploadToCloudinary(imageBase64, imageName);
+    console.log(`[uploadTeacherImage] ${imageType} uploaded successfully:`, downloadURL);
+    
+    return downloadURL;
+  } catch (error) {
+    console.error(`Error uploading ${imageType} image:`, error);
+    throw error;
+  }
+};
 
 // Get all teachers
 export const getAllTeachers = async (): Promise<Teacher[]> => {
@@ -70,14 +98,58 @@ export const getTeacherById = async (teacherId: string): Promise<Teacher | null>
   }
 };
 
-// Add new teacher
+// Add new teacher (receives URLs only, no base64)
 export const addTeacher = async (teacherData: Teacher): Promise<string> => {
   try {
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-      ...teacherData,
+    // Log what we're about to save to verify no base64
+    console.log('[SERVICE] Adding teacher with data:', {
+      teacherId: teacherData.teacherId,
+      firstName: teacherData.firstName,
+      photo: teacherData.photo ? '[URL]' : null,
+      faceImages: teacherData.faceImages ? Object.keys(teacherData.faceImages) : null,
+    });
+
+    const dataToSave: any = {
+      firstName: teacherData.firstName,
+      lastName: teacherData.lastName,
+      teacherId: teacherData.teacherId,
+      subject: teacherData.subject,
+      classes: teacherData.classes,
+      dateOfBirth: teacherData.dateOfBirth,
+      gender: teacherData.gender,
+      email: teacherData.email,
+      phone: teacherData.phone,
+      address: teacherData.address,
+      qualification: teacherData.qualification,
+      experience: teacherData.experience,
+      joiningDate: teacherData.joiningDate,
+      status: teacherData.status,
+      recentAttendance: teacherData.recentAttendance || null,
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    };
+
+    // Only add photo if it exists and is a string (URL)
+    if (teacherData.photo && typeof teacherData.photo === 'string') {
+      dataToSave.photo = teacherData.photo;
+    }
+
+    // Only add faceImages if they exist and contain only URLs
+    if (teacherData.faceImages && typeof teacherData.faceImages === 'object') {
+      const cleanFaceImages: any = {};
+      for (const [key, value] of Object.entries(teacherData.faceImages)) {
+        if (value && typeof value === 'string') {
+          cleanFaceImages[key] = value;
+        }
+      }
+      if (Object.keys(cleanFaceImages).length > 0) {
+        dataToSave.faceImages = cleanFaceImages;
+      }
+    }
+
+    console.log('[SERVICE] Saving to Firestore, data keys:', Object.keys(dataToSave));
+    const docRef = await addDoc(collection(db, COLLECTION_NAME), dataToSave);
+    console.log('[SERVICE] Teacher added with ID:', docRef.id);
     return docRef.id;
   } catch (error) {
     console.error("Error adding teacher:", error);

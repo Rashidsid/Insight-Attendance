@@ -7,8 +7,8 @@ import {
   deleteDoc,
   doc,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../config/firebase";
+import { db } from "../config/firebase";
+import { uploadToCloudinary } from "../config/cloudinary";
 
 // Interfaces
 export interface Student {
@@ -30,6 +30,13 @@ export interface Student {
   status: "Active" | "Inactive";
   attendance: string;
   photo?: string | null;
+  faceImages?: {
+    front?: string | null;
+    left?: string | null;
+    right?: string | null;
+    up?: string | null;
+    down?: string | null;
+  } | null;
   recentAttendance?: AttendanceRecord[];
   createdAt?: Date;
   updatedAt?: Date;
@@ -41,7 +48,26 @@ export interface AttendanceRecord {
 }
 
 const COLLECTION_NAME = "students";
-const PHOTOS_FOLDER = "student-photos";
+
+// Upload image to Cloudinary and return download URL
+export const uploadStudentImage = async (
+  rollNo: string,
+  imageBase64: string,
+  imageType: 'photo' | 'front' | 'left' | 'right' | 'up' | 'down'
+): Promise<string> => {
+  try {
+    const imageName = `student-${rollNo}-${imageType}-${Date.now()}`;
+    console.log(`[uploadStudentImage] Uploading ${imageType} for student ${rollNo}`);
+    
+    const downloadURL = await uploadToCloudinary(imageBase64, imageName);
+    console.log(`[uploadStudentImage] ${imageType} uploaded successfully:`, downloadURL);
+    
+    return downloadURL;
+  } catch (error) {
+    console.error(`Error uploading ${imageType} image:`, error);
+    throw error;
+  }
+};
 
 // Get all students
 export const getAllStudents = async (): Promise<Student[]> => {
@@ -73,14 +99,60 @@ export const getStudentById = async (studentId: string): Promise<Student | null>
   }
 };
 
-// Add new student
+// Add new student (receives URLs only, no base64)
 export const addStudent = async (studentData: Student): Promise<string> => {
   try {
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-      ...studentData,
+    // Log what we're about to save to verify no base64
+    console.log('[SERVICE] Adding student with data:', {
+      rollNo: studentData.rollNo,
+      firstName: studentData.firstName,
+      photo: studentData.photo ? '[URL]' : null,
+      faceImages: studentData.faceImages ? Object.keys(studentData.faceImages) : null,
+    });
+
+    const dataToSave: any = {
+      firstName: studentData.firstName,
+      lastName: studentData.lastName,
+      rollNo: studentData.rollNo,
+      class: studentData.class,
+      section: studentData.section,
+      dateOfBirth: studentData.dateOfBirth,
+      admissionDate: studentData.admissionDate,
+      gender: studentData.gender,
+      email: studentData.email,
+      phone: studentData.phone,
+      address: studentData.address,
+      parentName: studentData.parentName,
+      parentPhone: studentData.parentPhone,
+      parentEmail: studentData.parentEmail,
+      status: studentData.status,
+      attendance: studentData.attendance,
+      recentAttendance: studentData.recentAttendance || null,
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    };
+
+    // Only add photo if it exists and is a string (URL)
+    if (studentData.photo && typeof studentData.photo === 'string') {
+      dataToSave.photo = studentData.photo;
+    }
+
+    // Only add faceImages if they exist and contain only URLs
+    if (studentData.faceImages && typeof studentData.faceImages === 'object') {
+      const cleanFaceImages: any = {};
+      for (const [key, value] of Object.entries(studentData.faceImages)) {
+        if (value && typeof value === 'string') {
+          cleanFaceImages[key] = value;
+        }
+      }
+      if (Object.keys(cleanFaceImages).length > 0) {
+        dataToSave.faceImages = cleanFaceImages;
+      }
+    }
+
+    console.log('[SERVICE] Saving to Firestore, data keys:', Object.keys(dataToSave));
+    const docRef = await addDoc(collection(db, COLLECTION_NAME), dataToSave);
+    console.log('[SERVICE] Student added with ID:', docRef.id);
     return docRef.id;
   } catch (error) {
     console.error("Error adding student:", error);
@@ -116,40 +188,6 @@ export const deleteStudent = async (studentId: string): Promise<void> => {
   } catch (error) {
     console.error("Error deleting student:", error);
     throw error;
-  }
-};
-
-// Upload student photo
-export const uploadStudentPhoto = async (
-  studentId: string,
-  file: File
-): Promise<string> => {
-  try {
-    // Validate file size (max 5MB)
-    const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      throw new Error('File size exceeds 5MB limit');
-    }
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      throw new Error('File must be an image');
-    }
-
-    const fileName = `${studentId}-${Date.now()}`;
-    const storageRef = ref(storage, `${PHOTOS_FOLDER}/${fileName}`);
-    
-    console.log(`Uploading photo for student ${studentId}...`);
-    await uploadBytes(storageRef, file);
-    
-    console.log(`Getting download URL for ${fileName}...`);
-    const downloadURL = await getDownloadURL(storageRef);
-    
-    console.log(`Photo uploaded successfully: ${downloadURL}`);
-    return downloadURL;
-  } catch (error) {
-    console.error("Error uploading photo:", error);
-    throw new Error(error instanceof Error ? error.message : 'Failed to upload photo');
   }
 };
 
