@@ -5,11 +5,12 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
-import { ArrowLeft, Upload } from 'lucide-react';
+import { ArrowLeft, Upload, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTheme } from '../../contexts/ThemeContext';
-import { addTeacher } from '../../services/teacherService';
+import { addTeacher, uploadTeacherImage } from '../../services/teacherService';
 import { notifyTeacherCreated } from '../../services/emailService';
+import FaceCaptureModal from '../../components/FaceCaptureModal';
 
 interface Subject {
   id: string;
@@ -22,6 +23,8 @@ export default function AddTeacher() {
   const { theme } = useTheme();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [faceImages, setFaceImages] = useState<{ front: string | null; left: string | null; right: string | null; up: string | null; down: string | null } | null>(null);
+  const [showFaceCaptureModal, setShowFaceCaptureModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
@@ -82,17 +85,75 @@ export default function AddTeacher() {
     try {
       setLoading(true);
 
-      // Create teacher object with base64 photo (stored directly in Firestore like students)
+      // Step 1: Upload images to Firebase Storage and get URLs
+      let photoURL: string | null = null;
+      let faceImageURLs: Record<string, string> = {};
+
+      // Upload primary photo if provided
+      if (photoPreview && typeof photoPreview === 'string') {
+        try {
+          console.log('[DEBUG] Uploading photo...');
+          photoURL = await uploadTeacherImage(formData.teacherId, photoPreview, 'photo');
+          console.log('[DEBUG] Photo uploaded, URL:', photoURL);
+        } catch (error) {
+          console.warn('Warning: Could not upload profile photo:', error);
+        }
+      }
+
+      // Upload face images if provided
+      if (faceImages && typeof faceImages === 'object') {
+        console.log('[DEBUG] Uploading face images...');
+        for (const [angle, base64] of Object.entries(faceImages)) {
+          if (base64 && typeof base64 === 'string') {
+            try {
+              const url = await uploadTeacherImage(
+                formData.teacherId,
+                base64,
+                angle as 'front' | 'left' | 'right' | 'up' | 'down'
+              );
+              faceImageURLs[angle] = url;
+              console.log(`[DEBUG] ${angle} uploaded:`, url);
+            } catch (error) {
+              console.warn(`Warning: Could not upload ${angle} face image:`, error);
+            }
+          }
+        }
+      }
+
+      console.log('[DEBUG] All uploads complete. Creating teacher object...');
+
+      // Step 2: Create CLEAN teacher object with URLs ONLY (explicitly no base64)
       const newTeacher = {
-        ...formData,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        teacherId: formData.teacherId,
+        subject: formData.subject,
+        classes: formData.classes,
+        dateOfBirth: formData.dateOfBirth,
+        gender: formData.gender,
+        email: formData.email,
+        phone: formData.phone,
+        address: formData.address,
+        qualification: formData.qualification,
+        experience: formData.experience,
+        joiningDate: formData.joiningDate,
         status: 'Active' as const,
-        photo: photoPreview || null,
+        photo: photoURL, // Only URL string or null
+        faceImages: Object.keys(faceImageURLs).length > 0 ? faceImageURLs : null, // Only URLs or null
       };
 
-      // Add to Firebase
+      console.log('[DEBUG] Teacher object created:', {
+        ...newTeacher,
+        photo: newTeacher.photo ? '[URL]' : null,
+        faceImages: newTeacher.faceImages ? `{${Object.keys(newTeacher.faceImages).join(',')}}` : null,
+      });
+
+      // Step 3: Add to Firebase (with only URLs)
+      console.log('[DEBUG] Calling addTeacher...');
       await addTeacher(newTeacher);
+      console.log('[DEBUG] Teacher added successfully');
       
-      // Send welcome email notification
+      // Step 4: Send welcome email notification
       if (formData.email && formData.email.trim()) {
         const emailResult = await notifyTeacherCreated({
           email: formData.email,
@@ -100,7 +161,7 @@ export default function AddTeacher() {
           lastName: formData.lastName,
           teacherId: formData.teacherId,
           subject: formData.subject,
-          instituteName: 'Herald College Kathmandu', // Update this with your institution name
+          instituteName: 'Herald College Kathmandu',
         });
 
         if (emailResult.success) {
@@ -171,55 +232,86 @@ export default function AddTeacher() {
         <div className="grid grid-cols-3 gap-8">
           {/* Left Column - Photo Upload */}
           <div className="col-span-1">
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 sticky top-8">
-              <Label className="mb-4 block">Teacher Photo</Label>
-              <div className="aspect-square bg-gray-100 rounded-2xl flex flex-col items-center justify-center mb-4 border-2 border-dashed border-gray-300 overflow-hidden">
-                {photoPreview ? (
-                  <img src={photoPreview} alt="Teacher preview" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="flex flex-col items-center justify-center">
-                    <div 
-                      className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
-                      style={{ backgroundColor: theme.sidebarBg }}
-                    >
-                      <Upload className="w-8 h-8" style={{ color: theme.primaryColor }} />
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 sticky top-8 space-y-4">
+              <div>
+                <Label className="mb-4 block">Teacher Photo</Label>
+                <div className="aspect-square bg-gray-100 rounded-2xl flex flex-col items-center justify-center mb-4 border-2 border-dashed border-gray-300 overflow-hidden">
+                  {photoPreview || faceImages?.front ? (
+                    <img src={photoPreview || faceImages?.front || ''} alt="Teacher preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center">
+                      <div 
+                        className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+                        style={{ backgroundColor: theme.sidebarBg }}
+                      >
+                        <Upload className="w-8 h-8" style={{ color: theme.primaryColor }} />
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">Upload teacher photo</p>
+                      <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
                     </div>
-                    <p className="text-sm text-gray-600 mb-2">Upload teacher photo</p>
-                    <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
-                  </div>
-                )}
-              </div>
-              <div className="space-y-2">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoUpload}
-                  className="hidden"
-                  id="photo-upload"
-                />
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full rounded-xl gap-2"
-                onClick={() => document.getElementById('photo-upload')?.click()}
-                disabled={loading}
-              >
-                <Upload className="w-4 h-4" />
-                {photoPreview ? 'Change Photo' : 'Upload Photo'}
-              </Button>
-              {photoPreview && (
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoUpload}
+                    className="hidden"
+                    id="photo-upload"
+                  />
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full rounded-xl text-red-600 hover:text-red-700"
-                  onClick={() => {
-                    setPhotoPreview(null);
-                  }}
+                  className="w-full rounded-xl gap-2"
+                  onClick={() => document.getElementById('photo-upload')?.click()}
                   disabled={loading}
                 >
-                  Remove Photo
+                  <Upload className="w-4 h-4" />
+                  {photoPreview ? 'Change Photo' : 'Upload Photo'}
                 </Button>
-              )}
+                {(photoPreview || faceImages?.front) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full rounded-xl text-red-600 hover:text-red-700"
+                    onClick={() => {
+                      setPhotoPreview(null);
+                    }}
+                    disabled={loading}
+                  >
+                    Remove Photo
+                  </Button>
+                )}
+                </div>
+              </div>
+
+              {/* Multi-Angle Face Capture */}
+              <div className="border-t pt-4">
+                <Label className="mb-4 block">Multi-Angle Face Capture</Label>
+                <Button
+                  type="button"
+                  className="w-full rounded-xl gap-2"
+                  style={{ backgroundColor: theme.primaryColor, color: 'white' }}
+                  onClick={() => setShowFaceCaptureModal(true)}
+                  disabled={loading}
+                >
+                  <Camera className="w-4 h-4" />
+                  Capture Face Images
+                </Button>
+                
+                {/* Show captured face angles status */}
+                {faceImages && (
+                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm font-semibold text-green-900 mb-2">✓ Face images captured:</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-green-800">
+                      {faceImages.front && <div>✓ Front</div>}
+                      {faceImages.left && <div>✓ Left</div>}
+                      {faceImages.right && <div>✓ Right</div>}
+                      {faceImages.up && <div>✓ Up</div>}
+                      {faceImages.down && <div>✓ Down</div>}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -422,6 +514,19 @@ export default function AddTeacher() {
           </div>
         </div>
       </form>
+
+      {/* Face Capture Modal */}
+      {showFaceCaptureModal && (
+        <FaceCaptureModal
+          userType="Teacher"
+          onComplete={(images) => {
+            setFaceImages(images);
+            setShowFaceCaptureModal(false);
+            toast.success('Face images captured! You can now submit the form.');
+          }}
+          onCancel={() => setShowFaceCaptureModal(false)}
+        />
+      )}
     </div>
   );
 }

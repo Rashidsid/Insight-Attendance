@@ -5,13 +5,14 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
-import { ArrowLeft, Upload } from 'lucide-react';
+import { ArrowLeft, Upload, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTheme } from '../../contexts/ThemeContext';
-import { addStudent } from '../../services/studentService';
+import { addStudent, uploadStudentImage } from '../../services/studentService';
 import { getUniqueClassNames, getSectionsForClass } from '../../services/classService';
 import { notifyStudentCreated } from '../../services/emailService';
 import { enrollStudentFace } from '../../services/faceRecognitionService';
+import FaceCaptureModal from '../../components/FaceCaptureModal';
 
 export default function AddStudent() {
   const navigate = useNavigate();
@@ -19,6 +20,8 @@ export default function AddStudent() {
   const [classNames, setClassNames] = useState<string[]>([]);
   const [sections, setSections] = useState<string[]>([]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [faceImages, setFaceImages] = useState<{ front: string | null; left: string | null; right: string | null; up: string | null; down: string | null } | null>(null);
+  const [showFaceCaptureModal, setShowFaceCaptureModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
@@ -79,34 +82,92 @@ export default function AddStudent() {
     try {
       setLoading(true);
 
-      // Create student object with base64 photo if provided
+      // Step 1: Upload images to Firebase Storage and get URLs
+      let photoURL: string | null = null;
+      let faceImageURLs: Record<string, string> = {};
+
+      // Upload primary photo if provided
+      if (photoPreview && typeof photoPreview === 'string') {
+        try {
+          console.log('[DEBUG] Uploading photo...');
+          photoURL = await uploadStudentImage(formData.rollNo, photoPreview, 'photo');
+          console.log('[DEBUG] Photo uploaded, URL:', photoURL);
+        } catch (error) {
+          console.warn('Warning: Could not upload profile photo:', error);
+        }
+      }
+
+      // Upload face images if provided
+      if (faceImages && typeof faceImages === 'object') {
+        console.log('[DEBUG] Uploading face images...');
+        for (const [angle, base64] of Object.entries(faceImages)) {
+          if (base64 && typeof base64 === 'string') {
+            try {
+              const url = await uploadStudentImage(
+                formData.rollNo,
+                base64,
+                angle as 'front' | 'left' | 'right' | 'up' | 'down'
+              );
+              faceImageURLs[angle] = url;
+              console.log(`[DEBUG] ${angle} uploaded:`, url);
+            } catch (error) {
+              console.warn(`Warning: Could not upload ${angle} face image:`, error);
+            }
+          }
+        }
+      }
+
+      console.log('[DEBUG] All uploads complete. Creating student object...');
+
+      // Step 2: Create CLEAN student object with URLs ONLY (explicitly no base64)
       const newStudent = {
-        ...formData,
-        status: 'Active',
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        rollNo: formData.rollNo,
+        class: formData.class,
+        section: formData.section,
+        dateOfBirth: formData.dateOfBirth,
+        admissionDate: formData.admissionDate,
+        gender: formData.gender,
+        email: formData.email,
+        phone: formData.phone,
+        address: formData.address,
+        parentName: formData.parentName,
+        parentPhone: formData.parentPhone,
+        parentEmail: formData.parentEmail,
+        status: 'Active' as const,
         attendance: '0%',
         recentAttendance: [],
-        photo: photoPreview || null, // Store base64 directly in Firestore
+        photo: photoURL, // Only URL string or null
+        faceImages: Object.keys(faceImageURLs).length > 0 ? faceImageURLs : null, // Only URLs or null
       };
 
-      // Add student to Firebase
+      console.log('[DEBUG] Student object created:', {
+        ...newStudent,
+        photo: newStudent.photo ? '[URL]' : null,
+        faceImages: newStudent.faceImages ? `{${Object.keys(newStudent.faceImages).join(',')}}` : null,
+      });
+
+      // Step 3: Add student to Firebase (with only URLs)
+      console.log('[DEBUG] Calling addStudent...');
       await addStudent(newStudent as any);
+      console.log('[DEBUG] Student added successfully');
       
-      // Enroll face in Python API if photo is provided
-      if (photoPreview && formData.rollNo) {
+      // Step 4: Enroll face in Python API if available
+      const enrollImage = photoURL || faceImageURLs.front;
+      if (enrollImage && formData.rollNo) {
         try {
           console.log('[DEBUG] Starting face enrollment for:', formData.rollNo);
-          console.log('[DEBUG] Photo preview length:', photoPreview.length);
-          const enrollResult = await enrollStudentFace(formData.rollNo, photoPreview);
+          const enrollResult = await enrollStudentFace(formData.rollNo, enrollImage);
           console.log('[DEBUG] Enrollment result:', enrollResult);
           toast.success('Face enrolled for recognition!');
         } catch (error) {
           console.error('Warning: Could not enroll face in Python API:', error);
-          // Don't fail the student creation if face enrollment fails
           toast.warning('Student added but face enrollment failed. Please check Python API status.');
         }
       }
       
-      // Send welcome email notification
+      // Step 5: Send welcome email notification
       if (formData.email && formData.email.trim()) {
         const emailResult = await notifyStudentCreated({
           email: formData.email,
@@ -115,7 +176,7 @@ export default function AddStudent() {
           rollNo: formData.rollNo,
           class: formData.class,
           section: formData.section,
-          instituteName: 'Herald College Kathmandu', // Update this with your institution name
+          instituteName: 'Herald College Kathmandu',
         });
 
         if (emailResult.success) {
@@ -148,6 +209,7 @@ export default function AddStudent() {
         parentEmail: '',
       });
       setPhotoPreview(null);
+      setFaceImages(null);
       navigate('/admin/students');
     } catch (error) {
       console.error('Error adding student:', error);
@@ -202,52 +264,85 @@ export default function AddStudent() {
         <div className="grid grid-cols-3 gap-8">
           {/* Left Column - Photo Upload */}
           <div className="col-span-1">
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 sticky top-8">
-              <Label className="mb-4 block">Student Photo</Label>
-              <div className="aspect-square bg-gray-100 rounded-2xl flex flex-col items-center justify-center mb-4 border-2 border-dashed border-gray-300 overflow-hidden">
-                {photoPreview ? (
-                  <img src={photoPreview} alt="Student preview" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="flex flex-col items-center justify-center">
-                    <div 
-                      className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
-                      style={{ backgroundColor: theme.sidebarBg }}
-                    >
-                      <Upload className="w-8 h-8" style={{ color: theme.primaryColor }} />
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 sticky top-8 space-y-4">
+              <div>
+                <Label className="mb-4 block">Student Photo</Label>
+                <div className="aspect-square bg-gray-100 rounded-2xl flex flex-col items-center justify-center mb-4 border-2 border-dashed border-gray-300 overflow-hidden">
+                  {photoPreview || faceImages?.front ? (
+                    <img src={photoPreview || faceImages?.front || ''} alt="Student preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center">
+                      <div 
+                        className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+                        style={{ backgroundColor: theme.sidebarBg }}
+                      >
+                        <Upload className="w-8 h-8" style={{ color: theme.primaryColor }} />
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">Upload student photo</p>
+                      <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
                     </div>
-                    <p className="text-sm text-gray-600 mb-2">Upload student photo</p>
-                    <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
-                  </div>
-                )}
-              </div>
-              <div className="space-y-2">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoUpload}
-                  className="hidden"
-                  id="photo-upload"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full rounded-xl gap-2"
-                  onClick={() => document.getElementById('photo-upload')?.click()}
-                >
-                  <Upload className="w-4 h-4" />
-                  {photoPreview ? 'Change Photo' : 'Upload Photo'}
-                </Button>
-                {photoPreview && (
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoUpload}
+                    className="hidden"
+                    id="photo-upload"
+                  />
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full rounded-xl text-red-600 hover:text-red-700"
-                    onClick={() => {
-                      setPhotoPreview(null);
-                    }}
+                    className="w-full rounded-xl gap-2"
+                    onClick={() => document.getElementById('photo-upload')?.click()}
+                    disabled={loading}
                   >
-                    Remove Photo
+                    <Upload className="w-4 h-4" />
+                    {photoPreview ? 'Change Photo' : 'Upload Photo'}
                   </Button>
+                  {(photoPreview || faceImages?.front) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full rounded-xl text-red-600 hover:text-red-700"
+                      onClick={() => {
+                        setPhotoPreview(null);
+                      }}
+                      disabled={loading}
+                    >
+                      Remove Photo
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Multi-Angle Face Capture */}
+              <div className="border-t pt-4">
+                <Label className="mb-4 block">Multi-Angle Face Capture</Label>
+                <Button
+                  type="button"
+                  className="w-full rounded-xl gap-2"
+                  style={{ backgroundColor: theme.primaryColor, color: 'white' }}
+                  onClick={() => setShowFaceCaptureModal(true)}
+                  disabled={loading}
+                >
+                  <Camera className="w-4 h-4" />
+                  Capture Face Images
+                </Button>
+                
+                {/* Show captured face angles status */}
+                {faceImages && (
+                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm font-semibold text-green-900 mb-2">✓ Face images captured:</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-green-800">
+                      {faceImages.front && <div>✓ Front</div>}
+                      {faceImages.left && <div>✓ Left</div>}
+                      {faceImages.right && <div>✓ Right</div>}
+                      {faceImages.up && <div>✓ Up</div>}
+                      {faceImages.down && <div>✓ Down</div>}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -488,6 +583,19 @@ export default function AddStudent() {
           </div>
         </div>
       </form>
+
+      {/* Face Capture Modal */}
+      {showFaceCaptureModal && (
+        <FaceCaptureModal
+          userType="Student"
+          onComplete={(images) => {
+            setFaceImages(images);
+            setShowFaceCaptureModal(false);
+            toast.success('Face images captured! You can now submit the form.');
+          }}
+          onCancel={() => setShowFaceCaptureModal(false)}
+        />
+      )}
     </div>
   );
 }
