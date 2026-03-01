@@ -9,6 +9,7 @@ import {
   where,
   orderBy,
   Timestamp,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
 
@@ -341,6 +342,139 @@ export const getStudentSummary = async (studentId: string): Promise<any> => {
 /**
  * Mark attendance for student via face recognition
  */
+/**
+ * Mark attendance for teacher via face recognition
+ */
+export const markTeacherAttendanceViaFaceRecognition = async (
+  teacherId: string,
+  teacherName: string,
+  confidence: number
+): Promise<{ success: boolean; message: string }> => {
+  try {
+    console.log('[DEBUG] markTeacherAttendanceViaFaceRecognition called with:', { teacherId, teacherName, confidence });
+    
+    const today = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
+    const currentTime = new Date().toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    });
+
+    console.log('[DEBUG] Today:', today, 'Time:', currentTime);
+
+    // Check if already marked today
+    const q = query(
+      collection(db, "teacher_attendance"),
+      where("teacherId", "==", teacherId),
+      where("date", "==", today)
+    );
+    const existingRecords = await getDocs(q);
+
+    if (existingRecords.size > 0) {
+      console.log('[WARN] Attendance already marked today for teacher:', teacherId);
+      return {
+        success: false,
+        message: "Attendance already marked for today!",
+      };
+    }
+
+    // Add attendance record to teacher_attendance collection
+    const attendanceDocRef = await addDoc(collection(db, "teacher_attendance"), {
+      teacherId,
+      teacherName,
+      date: today,
+      time: currentTime,
+      status: "Present",
+      recognitionConfidence: Math.round(100 - confidence),
+      recognitionMethod: "Face Recognition",
+      remarks: `Face recognized with ${Math.round(100 - confidence)}% confidence`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    console.log('[DEBUG] Teacher attendance record created:', attendanceDocRef.id);
+
+    // Update teacher document with recent attendance
+    const teachersRef = collection(db, "teachers");
+    const teacherQ = query(teachersRef, where("id", "==", teacherId));
+    const teacherQueryDocs = await getDocs(teacherQ);
+
+    console.log('[DEBUG] Teacher query found:', teacherQueryDocs.size, 'documents');
+
+    let foundTeacher = false;
+    if (!teacherQueryDocs.empty) {
+      const teacherDoc = teacherQueryDocs.docs[0];
+      const existingAttendance = teacherDoc.data()?.recentAttendance || [];
+      
+      // Append new attendance record and keep last 30 records
+      const newAttendanceRecord = {
+        date: today,
+        time: currentTime,
+        status: "Present",
+        confidence: Math.round(100 - confidence),
+        recognitionMethod: "Face Recognition",
+      };
+      
+      const updatedAttendance = [newAttendanceRecord, ...existingAttendance].slice(0, 30);
+
+      await updateDoc(teacherDoc.ref, {
+        recentAttendance: updatedAttendance,
+        lastAttendanceTime: Timestamp.fromDate(new Date()),
+        lastAttendanceDate: today,
+      });
+      
+      foundTeacher = true;
+      console.log('[DEBUG] Updated teacher record by id field with accumulated attendance');
+    }
+
+    // Try updating by document ID if not found by 'id' field
+    if (!foundTeacher) {
+      try {
+        const teacherRef = doc(db, "teachers", teacherId);
+        const teacherSnap = await getDoc(teacherRef);
+        const existingAttendance = teacherSnap.data()?.recentAttendance || [];
+        
+        // Append new attendance record and keep last 30 records
+        const newAttendanceRecord = {
+          date: today,
+          time: currentTime,
+          status: "Present",
+          confidence: Math.round(100 - confidence),
+          recognitionMethod: "Face Recognition",
+        };
+        
+        const updatedAttendance = [newAttendanceRecord, ...existingAttendance].slice(0, 30);
+
+        await updateDoc(teacherRef, {
+          recentAttendance: updatedAttendance,
+          lastAttendanceTime: Timestamp.fromDate(new Date()),
+          lastAttendanceDate: today,
+        });
+        
+        console.log('[DEBUG] Updated teacher record by document ID with accumulated attendance');
+      } catch (updateError) {
+        console.warn('[WARN] Could not update teacher record:', updateError);
+      }
+    }
+
+    console.log(`✓ Teacher attendance marked for ${teacherName} at ${currentTime}`);
+    return {
+      success: true,
+      message: `Attendance marked successfully at ${currentTime}`,
+    };
+  } catch (error) {
+    console.error("Error marking teacher attendance via face recognition:", error);
+    return {
+      success: false,
+      message: "Failed to mark attendance. Please try again.",
+    };
+  }
+};
+
+/**
+ * Mark attendance for student via face recognition
+ */
 export const markAttendanceViaFaceRecognition = async (
   studentId: string,
   studentName: string,
@@ -404,47 +538,54 @@ export const markAttendanceViaFaceRecognition = async (
     let foundStudent = false;
     if (!studentQueryDocs.empty) {
       const studentDoc = studentQueryDocs.docs[0];
-      const recentAttendance = [
-        {
-          date: today,
-          time: currentTime,
-          status: "Present",
-          confidence: Math.round(100 - confidence),
-          recognitionMethod: "Face Recognition",
-        },
-      ];
+      const existingAttendance = studentDoc.data()?.recentAttendance || [];
+      
+      // Append new attendance record and keep last 30 records
+      const newAttendanceRecord = {
+        date: today,
+        time: currentTime,
+        status: "Present",
+        confidence: Math.round(100 - confidence),
+        recognitionMethod: "Face Recognition",
+      };
+      
+      const updatedAttendance = [newAttendanceRecord, ...existingAttendance].slice(0, 30);
 
       await updateDoc(studentDoc.ref, {
-        recentAttendance,
+        recentAttendance: updatedAttendance,
         lastAttendanceTime: Timestamp.fromDate(new Date()),
         lastAttendanceDate: today,
       });
       
       foundStudent = true;
-      console.log('[DEBUG] Updated student record by id field');
+      console.log('[DEBUG] Updated student record by id field with accumulated attendance');
     }
 
     // Try updating by document ID if not found by 'id' field
     if (!foundStudent) {
       try {
         const studentRef = doc(db, "students", studentId);
-        const recentAttendance = [
-          {
-            date: today,
-            time: currentTime,
-            status: "Present",
-            confidence: Math.round(100 - confidence),
-            recognitionMethod: "Face Recognition",
-          },
-        ];
+        const studentSnap = await getDoc(studentRef);
+        const existingAttendance = studentSnap.data()?.recentAttendance || [];
+        
+        // Append new attendance record and keep last 30 records
+        const newAttendanceRecord = {
+          date: today,
+          time: currentTime,
+          status: "Present",
+          confidence: Math.round(100 - confidence),
+          recognitionMethod: "Face Recognition",
+        };
+        
+        const updatedAttendance = [newAttendanceRecord, ...existingAttendance].slice(0, 30);
 
         await updateDoc(studentRef, {
-          recentAttendance,
+          recentAttendance: updatedAttendance,
           lastAttendanceTime: Timestamp.fromDate(new Date()),
           lastAttendanceDate: today,
         });
         
-        console.log('[DEBUG] Updated student record by document ID');
+        console.log('[DEBUG] Updated student record by document ID with accumulated attendance');
       } catch (updateError) {
         console.warn('[WARN] Could not update student record:', updateError);
         // Don't fail if student update fails, attendance is already recorded
