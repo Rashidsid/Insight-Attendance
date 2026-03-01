@@ -30,6 +30,7 @@ const getDefaultStudentData = () => ({
   parentPhone: '+91 98765 43211',
   status: 'Active' as 'Active' | 'Inactive',
   photo: null as string | null,
+  faceImages: null as { front?: string | null; left?: string | null; right?: string | null; up?: string | null; down?: string | null } | null,
   attendance: 92,
   recentAttendance: [] as Array<{ date: string; status: 'Present' | 'Absent' | 'Late'; time: string }>,
 });
@@ -74,25 +75,52 @@ export default function StudentView() {
             parentPhone: student.parentPhone,
             status: (student.status || 'Active') as 'Active' | 'Inactive',
             photo: student.photo || null,
+            faceImages: student.faceImages || null,
             attendance: student.attendance ? parseInt(student.attendance.toString()) : 0,
             recentAttendance: [],
           };
+          
+          // Load attendance records from student's recentAttendance field first
+          let formattedRecords: Array<{ date: string; status: 'Present' | 'Absent' | 'Late'; time: string }> = [];
+          
+          if (Array.isArray(student.recentAttendance) && student.recentAttendance.length > 0) {
+            console.log('[DEBUG] Loading recentAttendance from student document:', student.recentAttendance);
+            formattedRecords = student.recentAttendance.map(rec => ({
+              date: rec.date,
+              status: (rec.status || 'Present') as 'Present' | 'Absent' | 'Late',
+              time: rec.time || '-'
+            }));
+          }
+          
+          // If no recent attendance in student document, fall back to attendance collection
+          if (formattedRecords.length === 0) {
+            console.log('[DEBUG] No recentAttendance in student document, querying attendance collection');
+            try {
+              const attendanceRecs = await getAttendanceByStudent(id);
+              formattedRecords = attendanceRecs.slice(0, 30).map(rec => {
+                const dateStr = typeof rec.date === 'string' ? rec.date : (rec.date as any).toDate?.()?.toLocaleDateString?.() || new Date().toLocaleDateString();
+                return {
+                  date: dateStr,
+                  status: (rec.status || 'Present') as 'Present' | 'Absent' | 'Late',
+                  time: rec.time || '-'
+                };
+              });
+            } catch (attendanceError) {
+              console.warn('[WARN] Failed to load attendance from collection:', attendanceError);
+            }
+          }
+          
+          console.log('[DEBUG] Formatted attendance records:', formattedRecords);
+          
+          // Update studentData with recentAttendance
+          formattedStudent.recentAttendance = formattedRecords;
           setStudentData(formattedStudent);
+          setAttendanceRecords(formattedRecords);
+          
+          // Set status
           if (formattedStudent.status === 'Active' || formattedStudent.status === 'Inactive') {
             setStatus(formattedStudent.status);
           }
-
-          // Load attendance records from Firestore
-          const attendanceRecs = await getAttendanceByStudent(id);
-          const formattedRecords = attendanceRecs.slice(0, 20).map(rec => {
-            const dateStr = typeof rec.date === 'string' ? rec.date : (rec.date as any).toDate?.()?.toLocaleDateString?.() || new Date().toLocaleDateString();
-            return {
-              date: dateStr,
-              status: (rec.status || 'Present') as 'Present' | 'Absent' | 'Late',
-              time: rec.time || '-'
-            };
-          });
-          setAttendanceRecords(formattedRecords);
         }
       } catch (error) {
         toast.error('Failed to load student data');
@@ -305,8 +333,8 @@ export default function StudentView() {
           >
             <div className="flex flex-col items-center text-center">
               <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center text-5xl backdrop-blur-sm mb-4 overflow-hidden flex-shrink-0">
-                {studentData.photo ? (
-                  <img src={studentData.photo} alt={`${studentData.firstName} ${studentData.lastName}`} className="w-full h-full object-cover" />
+                {studentData.faceImages?.front || studentData.photo ? (
+                  <img src={studentData.faceImages?.front || studentData.photo || ''} alt={`${studentData.firstName} ${studentData.lastName}`} className="w-full h-full object-cover" />
                 ) : (
                   studentData.firstName.charAt(0)
                 )}
