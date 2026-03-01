@@ -3,6 +3,7 @@ node_modules/
 dist/
 build/
 python-face-api/
+functions/lib/
 
 # Environment variables
 .env
