@@ -5,7 +5,7 @@ import {
   recognizeFaceFromVideo,
   checkPythonAPIAvailability
 } from '../../services/faceRecognitionService';
-import { markAttendanceViaFaceRecognition } from '../../services/attendanceService';
+import { markAttendanceViaFaceRecognition, markTeacherAttendanceViaFaceRecognition } from '../../services/attendanceService';
 
 interface RecognitionResult {
   id: string;
@@ -166,14 +166,25 @@ export default function HomePage() {
           timestamp: result.timestamp
         });
 
-        // Mark attendance for recognized person
+        // Mark attendance for recognized person based on role
         try {
-          const attendanceResult = await markAttendanceViaFaceRecognition(
-            result.id,
-            `${result.firstName} ${result.lastName}`,
-            result.class,
-            result.confidence
-          );
+          let attendanceResult;
+          if (result.role === 'teacher') {
+            // Mark attendance for teacher
+            attendanceResult = await markTeacherAttendanceViaFaceRecognition(
+              result.id,
+              `${result.firstName} ${result.lastName}`,
+              result.confidence
+            );
+          } else {
+            // Mark attendance for student
+            attendanceResult = await markAttendanceViaFaceRecognition(
+              result.id,
+              `${result.firstName} ${result.lastName}`,
+              result.class,
+              result.confidence
+            );
+          }
 
           if (attendanceResult.success) {
             console.log('✓ Attendance marked:', attendanceResult.message);
@@ -410,14 +421,18 @@ export default function HomePage() {
               {/* Recognized ID */}
               <div>
                 <label className="text-white text-sm font-semibold uppercase tracking-wide mb-2 block">
-                  Recognized ID
+                  {recognitionResult?.role === 'teacher' ? 'Teacher ID' : 'Roll No'}
                 </label>
                 <div className="bg-slate-800/70 rounded-lg p-4 border border-slate-700 backdrop-blur-sm">
                   {recognitionResult?.matched ? (
                     <p 
                       className="text-2xl font-bold"
                       style={{ color: theme.primaryColor }}
-                    >{recognitionResult.id}</p>
+                    >
+                      {recognitionResult.role === 'teacher' 
+                        ? recognitionResult.rollNo  // For teachers, rollNo contains teacherId
+                        : recognitionResult.rollNo}
+                    </p>
                   ) : recognitionResult && !recognitionResult.matched ? (
                     <p className="text-slate-500 text-lg">-- Not Recognized --</p>
                   ) : (
@@ -463,6 +478,24 @@ export default function HomePage() {
                   </div>
                 </div>
               )}
+
+              {/* Subject for Teachers */}
+              {recognitionResult?.matched && recognitionResult.role === 'teacher' && (
+                <div>
+                  <label className="text-white text-sm font-semibold uppercase tracking-wide mb-2 block">
+                    Subject
+                  </label>
+                  <div className="bg-slate-800/70 rounded-lg p-4 border border-slate-700 backdrop-blur-sm">
+                    <p 
+                      className="text-lg font-semibold"
+                      style={{ color: theme.primaryColor }}
+                    >
+                      {recognitionResult.class}
+                    </p>
+                  </div>
+                </div>
+              )}
+
 
               {/* Status Message */}
               <div>
