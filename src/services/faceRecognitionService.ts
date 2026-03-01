@@ -161,6 +161,7 @@ export const recognizeFaceFromVideo = async (
     const result = await recognizeFromPythonAPI(base64Image);
 
     if (!result) {
+      console.log('[DEBUG] No recognition result from Python API');
       // No face detected or recognized
       return {
         id: '',
@@ -178,16 +179,21 @@ export const recognizeFaceFromVideo = async (
     }
 
     const usn = result.usn;
+    console.log('[DEBUG] Python API returned USN:', usn);
 
     // Query Firestore for student by roll number
     let person = await queryStudentByRollNo(usn);
+    console.log('[DEBUG] Student query result:', person ? 'Found' : 'Not Found');
 
     if (!person) {
+      console.log('[DEBUG] Trying teacher lookup with ID:', usn);
       // Try as teacher employee ID
       person = await queryTeacherByEmployeeId(usn);
+      console.log('[DEBUG] Teacher query result:', person ? 'Found' : 'Not Found');
     }
 
     if (person) {
+      console.log('[DEBUG] Person found:', { firstName: person.firstName, lastName: person.lastName, rollNo: person.rollNo });
       return {
         id: person.id,
         firstName: person.firstName || '',
@@ -225,18 +231,34 @@ export const recognizeFaceFromVideo = async (
 };
 
 /**
- * Query student by roll number from Firestore
+ * Query student by roll number from Firestore (with case-insensitive fallback)
  */
 const queryStudentByRollNo = async (rollNo: string): Promise<any | null> => {
   try {
-    const q = query(collection(db, 'students'), where('rollNo', '==', rollNo));
-    const querySnapshot = await getDocs(q);
+    // First try exact match
+    let q = query(collection(db, 'students'), where('rollNo', '==', rollNo));
+    let querySnapshot = await getDocs(q);
     if (!querySnapshot.empty) {
+      console.log('[DEBUG] Found student with exact rollNo match');
       return {
         id: querySnapshot.docs[0].id,
         ...querySnapshot.docs[0].data(),
       };
     }
+    
+    // Try case-insensitive by fetching all and comparing
+    console.log('[DEBUG] Exact match not found, trying case-insensitive search');
+    const allStudents = await getDocs(collection(db, 'students'));
+    for (const doc of allStudents.docs) {
+      if (doc.data().rollNo && doc.data().rollNo.toUpperCase() === rollNo.toUpperCase()) {
+        console.log('[DEBUG] Found student with case-insensitive match:', doc.data().rollNo);
+        return {
+          id: doc.id,
+          ...doc.data(),
+        };
+      }
+    }
+    
     return null;
   } catch (error) {
     console.error('Error querying student:', error);
@@ -245,18 +267,51 @@ const queryStudentByRollNo = async (rollNo: string): Promise<any | null> => {
 };
 
 /**
- * Query teacher by employee ID from Firestore
+ * Query teacher by employee ID from Firestore (with case-insensitive fallback)
  */
 const queryTeacherByEmployeeId = async (employeeId: string): Promise<any | null> => {
   try {
-    const q = query(collection(db, 'teachers'), where('employeeId', '==', employeeId));
-    const querySnapshot = await getDocs(q);
+    // First try exact match on multiple possible ID fields
+    let q = query(collection(db, 'teachers'), where('teacherId', '==', employeeId));
+    let querySnapshot = await getDocs(q);
     if (!querySnapshot.empty) {
+      console.log('[DEBUG] Found teacher with exact teacherId match');
       return {
         id: querySnapshot.docs[0].id,
         ...querySnapshot.docs[0].data(),
       };
     }
+    
+    // Try on employeeId field
+    try {
+      q = query(collection(db, 'teachers'), where('employeeId', '==', employeeId));
+      querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        console.log('[DEBUG] Found teacher with exact employeeId match');
+        return {
+          id: querySnapshot.docs[0].id,
+          ...querySnapshot.docs[0].data(),
+        };
+      }
+    } catch (e) {
+      // employeeId field might not exist on all teachers
+    }
+    
+    // Try case-insensitive by fetching all and comparing
+    console.log('[DEBUG] Exact match not found for teacher, trying case-insensitive search');
+    const allTeachers = await getDocs(collection(db, 'teachers'));
+    for (const doc of allTeachers.docs) {
+      const data = doc.data();
+      if ((data.teacherId && data.teacherId.toUpperCase() === employeeId.toUpperCase()) ||
+          (data.employeeId && data.employeeId.toUpperCase() === employeeId.toUpperCase())) {
+        console.log('[DEBUG] Found teacher with case-insensitive match');
+        return {
+          id: doc.id,
+          ...data,
+        };
+      }
+    }
+    
     return null;
   } catch (error) {
     console.error('Error querying teacher:', error);
