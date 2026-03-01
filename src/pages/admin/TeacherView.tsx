@@ -28,6 +28,7 @@ const getDefaultTeacherData = () => ({
   joiningDate: '2010-08-01',
   status: 'Active' as 'Active' | 'On Leave',
   photo: null as string | null,
+  faceImages: null as { front?: string | null; left?: string | null; right?: string | null; up?: string | null; down?: string | null } | null,
   recentAttendance: [] as Array<{ date: string; status: 'Present' | 'Absent' | 'Late'; time?: string }>,
 });
 
@@ -78,6 +79,7 @@ export default function TeacherView() {
             joiningDate: teacher.joiningDate,
             status: (teacher.status || 'Active') as 'Active' | 'On Leave',
             photo: teacher.photo || null,
+            faceImages: teacher.faceImages || null,
             recentAttendance: recentAttendance,
           };
           setTeacherData(formattedTeacher);
@@ -301,8 +303,8 @@ export default function TeacherView() {
               >
                 <div className="flex flex-col items-center text-center">
                   <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center text-5xl backdrop-blur-sm mb-4 overflow-hidden flex-shrink-0">
-                    {teacherData.photo ? (
-                      <img src={teacherData.photo} alt={`${teacherData.firstName} ${teacherData.lastName}`} className="w-full h-full object-cover" />
+                    {teacherData.faceImages?.front || teacherData.photo ? (
+                      <img src={teacherData.faceImages?.front || teacherData.photo || ''} alt={`${teacherData.firstName} ${teacherData.lastName}`} className="w-full h-full object-cover" />
                     ) : (
                       teacherData.firstName.charAt(0)
                     )}
