@@ -31,6 +31,13 @@ interface Student {
   attendance?: string;
   status: string;
   photo?: string | null;
+  faceImages?: {
+    front?: string | null;
+    left?: string | null;
+    right?: string | null;
+    up?: string | null;
+    down?: string | null;
+  } | null;
 }
 
 export default function StudentDashboard() {
@@ -43,6 +50,7 @@ export default function StudentDashboard() {
   const [localSearch, setLocalSearch] = useState('');
   const [filterClass, setFilterClass] = useState('all');
   const [filterSection, setFilterSection] = useState('all');
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
   // Load students from Firebase
   useEffect(() => {
@@ -50,18 +58,25 @@ export default function StudentDashboard() {
       try {
         setLoading(true);
         const data = await getAllStudents();
-        const formattedStudents = data.map((s: any) => ({
-          id: s.id,
-          firstName: s.firstName,
-          lastName: s.lastName,
-          name: `${s.firstName} ${s.lastName}`,
-          rollNo: s.rollNo,
-          class: s.class,
-          section: s.section,
-          attendance: s.attendance,
-          status: s.status,
-          photo: s.photo || null,
-        }));
+        const formattedStudents = data.map((s: any) => {
+          console.log(`[StudentDashboard] Student ${s.rollNo}:`, {
+            photo: s.photo ? 'Has photo URL' : 'No photo',
+            faceImageFront: s.faceImages?.front ? 'Has face image' : 'No face image',
+          });
+          return {
+            id: s.id,
+            firstName: s.firstName,
+            lastName: s.lastName,
+            name: `${s.firstName} ${s.lastName}`,
+            rollNo: s.rollNo,
+            class: s.class,
+            section: s.section,
+            attendance: s.attendance,
+            status: s.status,
+            photo: s.photo || null,
+            faceImages: s.faceImages || null,
+          };
+        });
         setStudents(formattedStudents);
       } catch (error) {
         console.error('Error loading students:', error);
@@ -124,9 +139,9 @@ export default function StudentDashboard() {
     return matchesGlobal && matchesLocal && matchesClass && matchesSection;
   });
 
-  // Get unique classes and sections for filter dropdowns
-  const uniqueClasses = [...new Set(students.map(s => s.class))].sort();
-  const uniqueSections = [...new Set(students.map(s => s.section))].sort();
+  // Get unique classes and sections for filter dropdowns (filter out empty values)
+  const uniqueClasses = [...new Set(students.map(s => s.class).filter(Boolean))].sort();
+  const uniqueSections = [...new Set(students.map(s => s.section).filter(Boolean))].sort();
 
   if (loading) {
     return (
@@ -257,10 +272,19 @@ export default function StudentDashboard() {
                         className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center font-semibold text-sm overflow-hidden"
                         style={{ backgroundColor: theme.sidebarBg, color: theme.primaryColor }}
                       >
-                        {student.photo ? (
-                          <img src={student.photo} alt={student.name} className="w-full h-full object-cover" />
+                        {/* Prefer face image (front), then photo, then initial */}
+                        {(student.faceImages?.front || student.photo) && !failedImages.has(student.id!) ? (
+                          <img 
+                            src={student.faceImages?.front || student.photo || ''} 
+                            alt={student.name} 
+                            className="w-full h-full object-cover" 
+                            onError={() => {
+                              console.warn(`[StudentDashboard] Image failed to load for ${student.name}`);
+                              setFailedImages(prev => new Set([...prev, student.id!]));
+                            }}
+                          />
                         ) : (
-                          student.name?.split(' ')[1]?.charAt(0) || student.name?.charAt(0)
+                          <span>{student.name?.split(' ')[1]?.charAt(0) || student.name?.charAt(0)}</span>
                         )}
                       </div>
                       <div>
