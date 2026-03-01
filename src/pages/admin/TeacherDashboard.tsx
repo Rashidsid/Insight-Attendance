@@ -31,6 +31,13 @@ interface Teacher {
   status: string;
   experience: string;
   photo?: string | null;
+  faceImages?: {
+    front?: string | null;
+    left?: string | null;
+    right?: string | null;
+    up?: string | null;
+    down?: string | null;
+  } | null;
 }
 
 export default function TeacherDashboard() {
@@ -42,6 +49,7 @@ export default function TeacherDashboard() {
   const [loading, setLoading] = useState(true);
   const [localSearch, setLocalSearch] = useState('');
   const [filterSubject, setFilterSubject] = useState('all');
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
   // Load teachers from Firebase
   useEffect(() => {
@@ -60,6 +68,7 @@ export default function TeacherDashboard() {
           status: t.status,
           experience: t.experience,
           photo: t.photo || null,
+          faceImages: t.faceImages || null,
         }));
         setTeachers(formattedTeachers);
       } catch (error) {
@@ -141,8 +150,8 @@ export default function TeacherDashboard() {
     return matchesGlobal && matchesLocal && matchesSubject;
   });
 
-  // Get unique subjects for filter dropdown
-  const uniqueSubjects = [...new Set(teachers.map(t => t.subject))].sort();
+  // Get unique subjects for filter dropdown (filter out empty values)
+  const uniqueSubjects = [...new Set(teachers.map(t => t.subject).filter(Boolean))].sort();
 
   if (loading) {
     return (
@@ -258,10 +267,18 @@ export default function TeacherDashboard() {
                         className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center font-semibold text-sm overflow-hidden"
                         style={{ backgroundColor: theme.sidebarBg, color: theme.primaryColor }}
                       >
-                        {teacher.photo ? (
-                          <img src={teacher.photo} alt={teacher.name} className="w-full h-full object-cover" />
+                        {(teacher.faceImages?.front || teacher.photo) && !failedImages.has(teacher.id!) ? (
+                          <img 
+                            src={teacher.faceImages?.front || teacher.photo || ''} 
+                            alt={teacher.name} 
+                            className="w-full h-full object-cover" 
+                            onError={() => {
+                              console.warn(`[TeacherDashboard] Image failed to load for ${teacher.name}`);
+                              setFailedImages(prev => new Set([...prev, teacher.id!]));
+                            }}
+                          />
                         ) : (
-                          teacher.name?.split(' ')[1]?.charAt(0) || teacher.name?.charAt(0)
+                          <span>{teacher.name?.split(' ')[1]?.charAt(0) || teacher.name?.charAt(0)}</span>
                         )}
                       </div>
                       <div>
