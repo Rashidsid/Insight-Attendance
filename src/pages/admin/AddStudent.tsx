@@ -154,7 +154,8 @@ export default function AddStudent() {
       console.log('[DEBUG] Student added successfully');
       
       // Step 4: Enroll face in Python API if available
-      const enrollImage = photoURL || faceImageURLs.front;
+      // Use the ORIGINAL BASE64 IMAGE from faceImages, not the uploaded URL
+      const enrollImage = faceImages?.front || photoPreview;
       if (enrollImage && formData.rollNo) {
         try {
           console.log('[DEBUG] Starting face enrollment for:', formData.rollNo);
