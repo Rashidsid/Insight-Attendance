@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '../../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Download, Calendar, FileText } from 'lucide-react';
+import { Download, Calendar, FileText, RefreshCw } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
 import { useTheme } from '../../contexts/ThemeContext';
-import { getAllAttendance, calculateAttendanceStats } from '../../services/attendanceService';
+import { getAllAttendance, calculateAttendanceStats, countWorkingDays } from '../../services/attendanceService';
 import AttendanceWidget from '../../components/AttendanceWidget';
 
 export default function Reports() {
@@ -18,12 +18,13 @@ export default function Reports() {
   const [classWiseData, setClassWiseData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [allClasses, setAllClasses] = useState<string[]>([]);
+  const [workingDaysInfo, setWorkingDaysInfo] = useState<{workingDays: number; recordedDays: number}>({workingDays: 0, recordedDays: 0});
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Load attendance data from database
-  useEffect(() => {
-    const loadData = async () => {
+  const loadData = useCallback(async () => {
       try {
-        setLoading(true);
+        setIsRefreshing(true);
         const attendanceRecords = await getAllAttendance();
         const classes = [...new Set(attendanceRecords.map((r) => r.class))].sort();
         setAllClasses(classes as string[]);
@@ -77,6 +78,27 @@ export default function Reports() {
         // Calculate statistics
         const calculatedStats = await calculateAttendanceStats(filteredRecords);
 
+        // Calculate working days info
+        let minDate = new Date();
+        let maxDate = new Date();
+        const uniqueDates = new Set<string>();
+
+        filteredRecords.forEach((record) => {
+          const dateValue = record.date instanceof Object && 'toDate' in record.date 
+            ? (record.date as any).toDate() 
+            : new Date(record.date as string);
+          if (dateValue < minDate) minDate = dateValue;
+          if (dateValue > maxDate) maxDate = dateValue;
+          uniqueDates.add(dateValue.toLocaleDateString('en-CA'));
+        });
+
+        const totalWorkingDays = filteredRecords.length > 0 ? countWorkingDays(minDate, maxDate) : 0;
+
+        setWorkingDaysInfo({
+          workingDays: Math.max(totalWorkingDays, 1),
+          recordedDays: uniqueDates.size
+        });
+
         setMonthlyData(
           calculatedStats.monthlyData.map((d: any) => ({
             ...d,
@@ -90,11 +112,30 @@ export default function Reports() {
         toast.error('Failed to load attendance data');
       } finally {
         setLoading(false);
+        setIsRefreshing(false);
       }
-    };
+    }, [selectedRole, selectedClass, selectedMonth]);
 
+  // Fetch data when filters change
+  useEffect(() => {
     loadData();
-  }, [selectedRole, selectedClass, selectedMonth]);
+  }, [selectedRole, selectedClass, selectedMonth, loadData]);
+
+  // Auto-refresh data every 30 seconds to catch updates from other pages
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadData();
+    }, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  // Manual refresh handler
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadData();
+    toast.success('Report data refreshed!');
+  };
 
   const generateReportHTML = (reportType: string) => {
     const today = new Date().toLocaleDateString('en-US', {
@@ -292,27 +333,75 @@ export default function Reports() {
                   </Select>
                 </div>
               </div>
-              <Button
-                onClick={() => {
-                  const reportHTML = generateReportHTML('Complete Attendance Report');
-                  const blob = new Blob([reportHTML], { type: 'text/html' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `Attendance_Report_${new Date().toISOString().split('T')[0]}.html`;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(url);
-                  toast.success('Report exported successfully!');
-                }}
-                style={{ backgroundColor: theme.primaryColor }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.sidebarAccent} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = theme.primaryColor} className="rounded-xl h-12 gap-2"
-              >
-                <Download className="w-5 h-5" />
-                Export HTML
-              </Button>
+              <div className="flex gap-3">
+                <Button
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  style={{ backgroundColor: theme.primaryColor }}
+                  onMouseEnter={(e) => !isRefreshing && (e.currentTarget.style.backgroundColor = theme.sidebarAccent)}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = theme.primaryColor}
+                  className="rounded-xl h-12 gap-2"
+                >
+                  <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                </Button>
+                <Button
+                  onClick={() => {
+                    const reportHTML = generateReportHTML('Complete Attendance Report');
+                    const blob = new Blob([reportHTML], { type: 'text/html' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Attendance_Report_${new Date().toISOString().split('T')[0]}.html`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    toast.success('Report exported successfully!');
+                  }}
+                  style={{ backgroundColor: theme.primaryColor }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.sidebarAccent} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = theme.primaryColor} className="rounded-xl h-12 gap-2"
+                >
+                  <Download className="w-5 h-5" />
+                  Export HTML
+                </Button>
+              </div>
             </div>
           </div>
+
+          {/* Key Statistics Cards */}
+          {stats && (
+            <div className="grid grid-cols-5 gap-4 mb-8">
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                <p className="text-gray-600 text-sm mb-2">Average Attendance</p>
+                <p className="text-3xl font-bold" style={{ color: theme.primaryColor }}>
+                  {stats.averageAttendance}%
+                </p>
+                <p className="text-xs text-gray-500 mt-2">Based on working days</p>
+              </div>
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                <p className="text-gray-600 text-sm mb-2">Total Present</p>
+                <p className="text-3xl font-bold text-green-600">{stats.totalPresent}</p>
+                <p className="text-xs text-gray-500 mt-2">Students marked</p>
+              </div>
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                <p className="text-gray-600 text-sm mb-2">Total Absent</p>
+                <p className="text-3xl font-bold text-red-600">{stats.totalAbsent}</p>
+                <p className="text-xs text-gray-500 mt-2">Students marked</p>
+              </div>
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                <p className="text-gray-600 text-sm mb-2">Late Arrivals</p>
+                <p className="text-3xl font-bold text-orange-600">{stats.totalLate}</p>
+                <p className="text-xs text-gray-500 mt-2">Students marked</p>
+              </div>
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                <p className="text-gray-600 text-sm mb-2">Working Days</p>
+                <p className="text-3xl font-bold" style={{ color: theme.primaryColor }}>
+                  {workingDaysInfo.workingDays}
+                </p>
+                <p className="text-xs text-gray-500 mt-2">{workingDaysInfo.recordedDays} days with records</p>
+              </div>
+            </div>
+          )}
 
           {/* Additional Charts Grid */}
           <div className="grid grid-cols-2 gap-8 mb-8">

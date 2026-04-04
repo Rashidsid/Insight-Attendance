@@ -18,6 +18,8 @@ export interface Student {
   rollNo: string;
   class: string;
   section: string;
+  institutionId?: string; // Reference to institution/college
+  institutionName?: string; // Institution name for display
   dateOfBirth: string;
   admissionDate: string;
   gender: string;
@@ -45,6 +47,7 @@ export interface Student {
 export interface AttendanceRecord {
   date: string;
   status: "Present" | "Absent" | "Late";
+  time?: string;
 }
 
 const COLLECTION_NAME = "students";

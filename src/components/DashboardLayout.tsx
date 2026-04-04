@@ -3,7 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router';
 import { Users, UserPlus, GraduationCap, FileText, Camera, ClipboardList, LogOut, Settings, User, ChevronDown } from 'lucide-react';
 import { useSearch } from '../contexts/SearchContext';
 import GlobalSearchBar from './GlobalSearchBar';
-import { getThemeFromStorage, applyTheme } from '../services/themeService';
+import { getThemeFromStorage, applyTheme, getLogoFromStorage } from '../services/themeService';
 
 export default function DashboardLayout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
@@ -13,6 +13,7 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
   const [sidebarBg, setSidebarBg] = useState('#E7D7F6');
   const [sidebarAccent, setSidebarAccent] = useState('#A982D9');
   const [buttonHoverBg, setButtonHoverBg] = useState('rgba(255, 255, 255, 0.5)');
+  const [logo, setLogo] = useState<string | null>(null);
   const isAdminRoute = location.pathname.includes('/admin/face-recognition') || location.pathname.includes('/admin/attendance-result') ? false : true;
 
   // Load theme on component mount
@@ -23,6 +24,15 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
     setButtonHoverBg(theme.buttonHoverBg);
     
     applyTheme(theme);
+
+    // Load logo
+    const adminEmail = localStorage.getItem('adminEmail');
+    if (adminEmail) {
+      const storedLogo = getLogoFromStorage(adminEmail);
+      if (storedLogo) {
+        setLogo(storedLogo);
+      }
+    }
   }, []);
 
   // Reload theme when returning from settings page
@@ -34,6 +44,15 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
       setButtonHoverBg(theme.buttonHoverBg);
       
       applyTheme(theme);
+
+      // Reload logo
+      const adminEmail = localStorage.getItem('adminEmail');
+      if (adminEmail) {
+        const storedLogo = getLogoFromStorage(adminEmail);
+        if (storedLogo) {
+          setLogo(storedLogo);
+        }
+      }
     };
     
     loadTheme();
@@ -60,7 +79,17 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
       <div className="w-[280px] flex flex-col" style={{ backgroundColor: sidebarBg }}>
-        <div className="p-4">
+        {/* Logo Section */}
+        <div className="p-4 flex justify-center">
+          {logo && (
+            <img 
+              src={logo} 
+              alt="Logo" 
+              className="h-32 w-auto object-contain"
+            />
+          )}
+        </div>
+        <div className="p-4 pt-0">
           <nav className="space-y-5">
             {menuItems.map((item) => {
               const Icon = item.icon;

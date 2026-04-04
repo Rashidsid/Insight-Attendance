@@ -12,6 +12,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
+import { getAttendanceSettings } from "./attendanceSettingsService";
 
 export interface AttendanceRecord {
   id?: string;
@@ -60,6 +61,49 @@ export interface StatusCount {
 }
 
 const COLLECTION_NAME = "attendance";
+
+/**
+ * Helper function to convert HH:MM to minutes since midnight
+ */
+function timeToMinutes(timeStr: string): number {
+  const [hours, minutes] = timeStr.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+/**
+ * Determine attendance status based on current time and work hours
+ * Logic: If marked within (workStartTime + lateTimeAllowed), mark as "Late"
+ *        Otherwise, mark as "Present"
+ */
+async function determineAttendanceStatus(
+  currentTimeStr: string // HH:MM format (24-hour)
+): Promise<"Present" | "Late"> {
+  try {
+    // Get settings
+    const settings = await getAttendanceSettings();
+    
+    if (!settings) {
+      // If settings not configured, default to "Present"
+      return "Present";
+    }
+
+    const currentMinutes = timeToMinutes(currentTimeStr.split(":").slice(0, 2).join(":"));
+    const workStartMinutes = timeToMinutes(settings.workStartTime);
+    const lateTimeThreshold = workStartMinutes + settings.lateTimeAllowed;
+
+    // If arrival time is after (workStartTime + lateTimeAllowed), mark as Present
+    // Otherwise, mark as Late
+    if (currentMinutes > lateTimeThreshold) {
+      return "Present";
+    } else {
+      return "Late";
+    }
+  } catch (error) {
+    console.error("Error determining attendance status:", error);
+    // Default to Present if error
+    return "Present";
+  }
+}
 
 // Get all attendance records
 export const getAllAttendance = async (): Promise<AttendanceRecord[]> => {
@@ -180,19 +224,84 @@ export const deleteAttendanceRecord = async (recordId: string): Promise<void> =>
   }
 };
 
-// Calculate attendance statistics
+/**
+ * Count working days (Monday-Friday, excluding holidays) between two dates
+ * This used for accurate attendance percentage calculation
+ */
+export const countWorkingDays = (
+  startDate: Date,
+  endDate: Date,
+  holidays: string[] = []
+): number => {
+  let count = 0;
+  const current = new Date(startDate);
+
+  while (current <= endDate) {
+    const dayOfWeek = current.getDay();
+    const dateString = current.toLocaleDateString("en-CA"); // YYYY-MM-DD
+
+    // Skip weekends (0 = Sunday, 6 = Saturday) and holidays
+    if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays.includes(dateString)) {
+      count++;
+    }
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  return count;
+};
+
+/**
+ * Calculate attendance statistics with accurate percentage based on working days
+ * Formula: (Present + Late) / Total Working Days * 100
+ */
 export const calculateAttendanceStats = async (
-  records: AttendanceRecord[]
+  records: AttendanceRecord[],
+  holidays: string[] = []
 ): Promise<AttendanceStats> => {
   const totalPresent = records.filter((r) => r.status === "Present").length;
   const totalAbsent = records.filter((r) => r.status === "Absent").length;
   const totalLate = records.filter((r) => r.status === "Late").length;
-  const total = records.length || 1;
 
+  // Get date range from records
+  let minDate = new Date();
+  let maxDate = new Date();
+  let hasRecords = false;
+
+  records.forEach((record) => {
+    hasRecords = true;
+    const date = record.date instanceof Object && 'toDate' in record.date
+      ? (record.date as any).toDate()
+      : new Date(record.date as string);
+
+    if (date < minDate) minDate = date;
+    if (date > maxDate) maxDate = date;
+  });
+
+  // If no records, return zero stats
+  if (!hasRecords) {
+    return {
+      totalPresent: 0,
+      totalAbsent: 0,
+      totalLate: 0,
+      averageAttendance: 0,
+      classWiseData: [],
+      monthlyData: [],
+      statusData: [],
+    };
+  }
+
+  // Calculate working days in the date range
+  const workingDays = countWorkingDays(minDate, maxDate, holidays);
+  const totalWorkingDays = Math.max(workingDays, 1); // Avoid division by zero
+
+  // Accurate percentage: (Present + Late) / Working Days
   const averageAttendance =
-    total > 0 ? Math.round((totalPresent / total) * 100) : 0;
+    totalWorkingDays > 0
+      ? Math.round(((totalPresent + totalLate) / totalWorkingDays) * 100)
+      : 0;
 
-  // Class-wise calculation
+  // Class-wise calculation with accurate percentages
   const classMap = new Map<string, any>();
   records.forEach((record) => {
     if (!classMap.has(record.class)) {
@@ -202,6 +311,7 @@ export const calculateAttendanceStats = async (
         absent: 0,
         late: 0,
         total: 0,
+        dates: new Set<string>(),
       });
     }
     const data = classMap.get(record.class);
@@ -209,18 +319,41 @@ export const calculateAttendanceStats = async (
     if (record.status === "Present") data.present += 1;
     if (record.status === "Absent") data.absent += 1;
     if (record.status === "Late") data.late += 1;
+    // Track unique dates per class
+    const dateString = record.date instanceof Object && 'toDate' in record.date
+      ? (record.date as any).toDate().toLocaleDateString("en-CA")
+      : typeof record.date === 'string'
+        ? record.date
+        : new Date(record.date).toLocaleDateString("en-CA");
+    data.dates.add(dateString);
   });
 
-  const classWiseData = Array.from(classMap.values()).map((data) => ({
-    ...data,
-    attendance: Math.round((data.present / data.total) * 100),
-  }));
+  const classWiseData = Array.from(classMap.values()).map((data) => {
+    // For each class, calculate working days in their date range
+    const classDates = (Array.from(data.dates) as string[]).map((d) => new Date(d));
+    const classMinDate = new Date(Math.min(...classDates.map((d) => d.getTime())));
+    const classMaxDate = new Date(Math.max(...classDates.map((d) => d.getTime())));
+    const classWorkingDays = Math.max(
+      countWorkingDays(classMinDate, classMaxDate, holidays),
+      1
+    );
 
-  // Monthly calculation
+    return {
+      class: data.class,
+      present: data.present,
+      absent: data.absent,
+      late: data.late,
+      total: data.total,
+      workingDays: classWorkingDays,
+      attendance: Math.round(((data.present + data.late) / classWorkingDays) * 100),
+    };
+  });
+
+  // Monthly calculation with accurate percentages
   const monthMap = new Map<string, any>();
   records.forEach((record) => {
     const date = record.date instanceof Object && 'toDate' in record.date
-      ? (record.date as any).toDate() 
+      ? (record.date as any).toDate()
       : new Date(record.date as string);
     const monthKey = date.toLocaleString("default", {
       month: "short",
@@ -234,6 +367,7 @@ export const calculateAttendanceStats = async (
         absent: 0,
         late: 0,
         total: 0,
+        dates: new Set<string>(),
       });
     }
     const data = monthMap.get(monthKey);
@@ -241,13 +375,29 @@ export const calculateAttendanceStats = async (
     if (record.status === "Present") data.present += 1;
     if (record.status === "Absent") data.absent += 1;
     if (record.status === "Late") data.late += 1;
+    data.dates.add(date.toLocaleDateString("en-CA"));
   });
 
   const monthlyData = Array.from(monthMap.values())
-    .map((data) => ({
-      ...data,
-      percentage: Math.round((data.present / data.total) * 100),
-    }))
+    .map((data) => {
+      const monthDates = (Array.from(data.dates) as string[]).map((d) => new Date(d));
+      const monthMinDate = new Date(Math.min(...monthDates.map((d) => d.getTime())));
+      const monthMaxDate = new Date(Math.max(...monthDates.map((d) => d.getTime())));
+      const monthWorkingDays = Math.max(
+        countWorkingDays(monthMinDate, monthMaxDate, holidays),
+        1
+      );
+
+      return {
+        month: data.month,
+        present: data.present,
+        absent: data.absent,
+        late: data.late,
+        total: data.total,
+        workingDays: monthWorkingDays,
+        percentage: Math.round(((data.present + data.late) / monthWorkingDays) * 100),
+      };
+    })
     .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime());
 
   const statusData: StatusCount[] = [
@@ -267,24 +417,29 @@ export const calculateAttendanceStats = async (
   };
 };
 
-// Get daily summary
+// Get daily summary with accurate calculation
 export const getDailySummary = async (date: string): Promise<any> => {
   try {
     const records = await getAttendanceByDate(date);
+    const presentCount = records.filter((r) => r.status === "Present").length;
+    const lateCount = records.filter((r) => r.status === "Late").length;
+    const absentCount = records.filter((r) => r.status === "Absent").length;
+    const totalRecords = records.length || 1;
+
+    // Accurate percentage: (Present + Late) / Total Records
+    // For daily summary, all records = working day entries
+    const percentage =
+      totalRecords > 0
+        ? Math.round(((presentCount + lateCount) / totalRecords) * 100)
+        : 0;
+
     return {
       date,
       total: records.length,
-      present: records.filter((r) => r.status === "Present").length,
-      absent: records.filter((r) => r.status === "Absent").length,
-      late: records.filter((r) => r.status === "Late").length,
-      percentage:
-        records.length > 0
-          ? Math.round(
-              (records.filter((r) => r.status === "Present").length /
-                records.length) *
-                100
-            )
-          : 0,
+      present: presentCount,
+      late: lateCount,
+      absent: absentCount,
+      percentage,
       records,
     };
   } catch (error) {
@@ -293,21 +448,49 @@ export const getDailySummary = async (date: string): Promise<any> => {
   }
 };
 
-// Get class summary
+// Get class summary with accurate calculation
 export const getClassSummary = async (className: string): Promise<any> => {
   try {
     const records = await getAttendanceByClass(className);
-    const totalRecords = records.length || 1;
+    const presentCount = records.filter((r) => r.status === "Present").length;
+    const lateCount = records.filter((r) => r.status === "Late").length;
+    const absentCount = records.filter((r) => r.status === "Absent").length;
+
+    // Get unique dates in this class records
+    const uniqueDates = new Set<string>();
+    records.forEach((record) => {
+      const dateString = record.date instanceof Object && 'toDate' in record.date
+        ? (record.date as any).toDate().toLocaleDateString("en-CA")
+        : typeof record.date === 'string'
+          ? record.date
+          : new Date(record.date).toLocaleDateString("en-CA");
+      uniqueDates.add(dateString);
+    });
+
+    // Calculate working days for this class
+    const classDates = Array.from(uniqueDates).map((d) => new Date(d));
+    let classMinDate = new Date();
+    let classMaxDate = new Date();
+
+    if (classDates.length > 0) {
+      classMinDate = new Date(Math.min(...classDates.map((d) => d.getTime())));
+      classMaxDate = new Date(Math.max(...classDates.map((d) => d.getTime())));
+    }
+
+    const workingDays = Math.max(countWorkingDays(classMinDate, classMaxDate), 1);
+
+    // Accurate percentage
+    const percentage = Math.round(((presentCount + lateCount) / workingDays) * 100);
+
     return {
       class: className,
       total: records.length,
-      present: records.filter((r) => r.status === "Present").length,
-      absent: records.filter((r) => r.status === "Absent").length,
-      late: records.filter((r) => r.status === "Late").length,
-      percentage: Math.round(
-        (records.filter((r) => r.status === "Present").length / totalRecords) *
-          100
-      ),
+      present: presentCount,
+      late: lateCount,
+      absent: absentCount,
+      workingDays,
+      uniqueDays: uniqueDates.size,
+      percentage,
       records,
     };
   } catch (error) {
@@ -316,21 +499,49 @@ export const getClassSummary = async (className: string): Promise<any> => {
   }
 };
 
-// Get student summary
+// Get student summary with accurate calculation
 export const getStudentSummary = async (studentId: string): Promise<any> => {
   try {
     const records = await getAttendanceByStudent(studentId);
-    const totalRecords = records.length || 1;
+    const presentCount = records.filter((r) => r.status === "Present").length;
+    const lateCount = records.filter((r) => r.status === "Late").length;
+    const absentCount = records.filter((r) => r.status === "Absent").length;
+
+    // Get unique dates in student records
+    const uniqueDates = new Set<string>();
+    records.forEach((record) => {
+      const dateString = record.date instanceof Object && 'toDate' in record.date
+        ? (record.date as any).toDate().toLocaleDateString("en-CA")
+        : typeof record.date === 'string'
+          ? record.date
+          : new Date(record.date).toLocaleDateString("en-CA");
+      uniqueDates.add(dateString);
+    });
+
+    // Calculate working days for this student
+    const studentDates = Array.from(uniqueDates).map((d) => new Date(d));
+    let studentMinDate = new Date();
+    let studentMaxDate = new Date();
+
+    if (studentDates.length > 0) {
+      studentMinDate = new Date(Math.min(...studentDates.map((d) => d.getTime())));
+      studentMaxDate = new Date(Math.max(...studentDates.map((d) => d.getTime())));
+    }
+
+    const workingDays = Math.max(countWorkingDays(studentMinDate, studentMaxDate), 1);
+
+    // Accurate percentage
+    const percentage = Math.round(((presentCount + lateCount) / workingDays) * 100);
+
     return {
       studentId,
       total: records.length,
-      present: records.filter((r) => r.status === "Present").length,
-      absent: records.filter((r) => r.status === "Absent").length,
-      late: records.filter((r) => r.status === "Late").length,
-      percentage: Math.round(
-        (records.filter((r) => r.status === "Present").length / totalRecords) *
-          100
-      ),
+      present: presentCount,
+      late: lateCount,
+      absent: absentCount,
+      workingDays,
+      uniqueDays: uniqueDates.size,
+      percentage,
       records,
     };
   } catch (error) {
@@ -360,6 +571,13 @@ export const markTeacherAttendanceViaFaceRecognition = async (
       second: "2-digit",
       hour12: true,
     });
+    
+    // Extract HH:MM for status determination
+    const currentTimeHHMM = new Date().toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
 
     console.log('[DEBUG] Today:', today, 'Time:', currentTime);
 
@@ -379,16 +597,20 @@ export const markTeacherAttendanceViaFaceRecognition = async (
       };
     }
 
+    // Determine attendance status based on current time and late time allowed
+    const attendanceStatus = await determineAttendanceStatus(currentTimeHHMM);
+    console.log('[DEBUG] Attendance status determined:', attendanceStatus);
+
     // Add attendance record to teacher_attendance collection
     const attendanceDocRef = await addDoc(collection(db, "teacher_attendance"), {
       teacherId,
       teacherName,
       date: today,
       time: currentTime,
-      status: "Present",
+      status: attendanceStatus,
       recognitionConfidence: Math.round(100 - confidence),
       recognitionMethod: "Face Recognition",
-      remarks: `Face recognized with ${Math.round(100 - confidence)}% confidence`,
+      remarks: `Face recognized with ${Math.round(100 - confidence)}% confidence (${attendanceStatus})`,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -411,7 +633,7 @@ export const markTeacherAttendanceViaFaceRecognition = async (
       const newAttendanceRecord = {
         date: today,
         time: currentTime,
-        status: "Present",
+        status: attendanceStatus,
         confidence: Math.round(100 - confidence),
         recognitionMethod: "Face Recognition",
       };
@@ -439,7 +661,7 @@ export const markTeacherAttendanceViaFaceRecognition = async (
         const newAttendanceRecord = {
           date: today,
           time: currentTime,
-          status: "Present",
+          status: attendanceStatus,
           confidence: Math.round(100 - confidence),
           recognitionMethod: "Face Recognition",
         };
@@ -458,10 +680,10 @@ export const markTeacherAttendanceViaFaceRecognition = async (
       }
     }
 
-    console.log(`✓ Teacher attendance marked for ${teacherName} at ${currentTime}`);
+    console.log(`✓ Teacher attendance marked for ${teacherName} at ${currentTime} (${attendanceStatus})`);
     return {
       success: true,
-      message: `Attendance marked successfully at ${currentTime}`,
+      message: `Attendance marked as ${attendanceStatus} at ${currentTime}`,
     };
   } catch (error) {
     console.error("Error marking teacher attendance via face recognition:", error);
@@ -491,6 +713,13 @@ export const markAttendanceViaFaceRecognition = async (
       second: "2-digit",
       hour12: true,
     });
+    
+    // Extract HH:MM for status determination
+    const currentTimeHHMM = new Date().toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
 
     console.log('[DEBUG] Today:', today, 'Time:', currentTime);
 
@@ -510,6 +739,10 @@ export const markAttendanceViaFaceRecognition = async (
       };
     }
 
+    // Determine attendance status based on current time and late time allowed
+    const attendanceStatus = await determineAttendanceStatus(currentTimeHHMM);
+    console.log('[DEBUG] Attendance status determined:', attendanceStatus);
+
     // Add attendance record
     const attendanceDocRef = await addDoc(collection(db, COLLECTION_NAME), {
       studentId,
@@ -517,10 +750,10 @@ export const markAttendanceViaFaceRecognition = async (
       class: className,
       date: today,
       time: currentTime,
-      status: "Present",
+      status: attendanceStatus,
       recognitionConfidence: Math.round(100 - confidence), // Lower confidence in API = better match
       recognitionMethod: "Face Recognition",
-      remarks: `Face recognized with ${Math.round(100 - confidence)}% confidence`,
+      remarks: `Face recognized with ${Math.round(100 - confidence)}% confidence (${attendanceStatus})`,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -544,7 +777,7 @@ export const markAttendanceViaFaceRecognition = async (
       const newAttendanceRecord = {
         date: today,
         time: currentTime,
-        status: "Present",
+        status: attendanceStatus,
         confidence: Math.round(100 - confidence),
         recognitionMethod: "Face Recognition",
       };
@@ -572,7 +805,7 @@ export const markAttendanceViaFaceRecognition = async (
         const newAttendanceRecord = {
           date: today,
           time: currentTime,
-          status: "Present",
+          status: attendanceStatus,
           confidence: Math.round(100 - confidence),
           recognitionMethod: "Face Recognition",
         };
@@ -602,6 +835,113 @@ export const markAttendanceViaFaceRecognition = async (
     return {
       success: false,
       message: "Failed to mark attendance. Please try again.",
+    };
+  }
+};
+/**
+ * Calculate personal attendance percentages for different time periods
+ * Returns overall, this month, and last month attendance percentages
+ */
+export const getPersonalAttendanceByPeriod = async (
+  personId: string,
+  isStudent: boolean = true
+): Promise<{
+  overall: number;
+  thisMonth: number;
+  lastMonth: number;
+  totalDays: number;
+  totalPresent: number;
+  totalAbsent: number;
+  totalLate: number;
+}> => {
+  try {
+    let records: AttendanceRecord[] = [];
+    
+    if (isStudent) {
+      records = await getAttendanceByStudent(personId);
+    } else {
+      // For teachers, fetch from a similar collection or use a different query
+      // For now, we'll use attendance records filtered by the teacher ID
+      const q = query(
+        collection(db, COLLECTION_NAME),
+        where("teacherId", "==", personId)
+      );
+      const snapshot = await getDocs(q);
+      records = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as AttendanceRecord[];
+    }
+
+    // Calculate totals
+    const totalPresent = records.filter((r) => r.status === "Present").length;
+    const totalLate = records.filter((r) => r.status === "Late").length;
+    const totalAbsent = records.filter((r) => r.status === "Absent").length;
+    const totalDays = records.length;
+
+    // Helper to convert date string or Timestamp to Date
+    const getDateFromRecord = (date: any): Date => {
+      if (date instanceof Object && 'toDate' in date) {
+        return (date as any).toDate();
+      }
+      if (typeof date === 'string') {
+        return new Date(date);
+      }
+      return new Date(date);
+    };
+
+    // Get current date
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // Calculate This Month attendance
+    const thisMonthRecords = records.filter((r) => {
+      const date = getDateFromRecord(r.date);
+      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+    });
+
+    const thisMonthPresent = thisMonthRecords.filter((r) => r.status === "Present" || r.status === "Late").length;
+    const thisMonthTotal = thisMonthRecords.length;
+    const thisMonth = thisMonthTotal > 0 ? Math.round((thisMonthPresent / thisMonthTotal) * 100) : 0;
+
+    // Calculate Last Month attendance
+    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonth_M = lastMonthDate.getMonth();
+    const lastMonth_Y = lastMonthDate.getFullYear();
+
+    const lastMonthRecords = records.filter((r) => {
+      const date = getDateFromRecord(r.date);
+      return date.getMonth() === lastMonth_M && date.getFullYear() === lastMonth_Y;
+    });
+
+    const lastMonthPresent = lastMonthRecords.filter((r) => r.status === "Present" || r.status === "Late").length;
+    const lastMonthTotalDays = lastMonthRecords.length;
+    const lastMonthPercentage = lastMonthTotalDays > 0 ? Math.round((lastMonthPresent / lastMonthTotalDays) * 100) : 0;
+
+    // Calculate Overall attendance
+    const overall = totalDays > 0 ? Math.round(((totalPresent + totalLate) / totalDays) * 100) : 0;
+
+    return {
+      overall,
+      thisMonth,
+      lastMonth: lastMonthPercentage,
+      totalDays,
+      totalPresent,
+      totalAbsent,
+      totalLate,
+    };
+  } catch (error) {
+    console.error("Error calculating personal attendance by period:", error);
+    // Return zeros on error
+    return {
+      overall: 0,
+      thisMonth: 0,
+      lastMonth: 0,
+      totalDays: 0,
+      totalPresent: 0,
+      totalAbsent: 0,
+      totalLate: 0,
     };
   }
 };

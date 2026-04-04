@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateTeacherReport, downloadReport } from '../../utils/reportGenerator';
 import { getTeacherById, updateTeacherStatus, updateTeacherAttendance } from '../../services/teacherService';
+import { getPersonalAttendanceByPeriod } from '../../services/attendanceService';
 
 // Default mock teacher data structure
 const getDefaultTeacherData = () => ({
@@ -46,6 +47,15 @@ export default function TeacherView() {
   const [dateRange, setDateRange] = useState('1month');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [attendanceStats, setAttendanceStats] = useState({
+    overall: 0,
+    thisMonth: 0,
+    lastMonth: 0,
+    totalDays: 0,
+    totalPresent: 0,
+    totalAbsent: 0,
+    totalLate: 0,
+  });
 
   // Load teacher data from Firebase
   useEffect(() => {
@@ -98,10 +108,77 @@ export default function TeacherView() {
     loadTeacher();
   }, [id]);
 
+  // Calculate attendance statistics based on live data
+  useEffect(() => {
+    const calculateStats = async () => {
+      if (!id) return;
+      try {
+        const stats = await getPersonalAttendanceByPeriod(id, false);
+        setAttendanceStats(stats);
+      } catch (error) {
+        console.error('Error calculating attendance stats:', error);
+      }
+    };
+    calculateStats();
+    // Refresh stats every minute for live updates
+    const interval = setInterval(calculateStats, 60000);
+    return () => clearInterval(interval);
+  }, [id]);
+
+  // Recalculate stats whenever attendance records change
+  useEffect(() => {
+    const stats = getAttendanceStats();
+    
+    // Calculate this month percentage
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    
+    const thisMonthRecords = attendanceRecords.filter(r => {
+      const date = new Date(r.date);
+      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+    });
+    const thisMonthPresent = thisMonthRecords.filter(r => r.status === 'Present').length;
+    const thisMonthLate = thisMonthRecords.filter(r => r.status === 'Late').length;
+    const thisMonthTotal = thisMonthRecords.length;
+    const thisMonthPercentage = thisMonthTotal > 0 ? Math.round(((thisMonthPresent + thisMonthLate) / thisMonthTotal) * 100) : 0;
+    
+    // Calculate last month percentage
+    const lastMonthDate = new Date(today.getFullYear(), today.getMonth() - 1);
+    const lastMonth = lastMonthDate.getMonth();
+    const lastMonthYear = lastMonthDate.getFullYear();
+    
+    const lastMonthRecords = attendanceRecords.filter(r => {
+      const date = new Date(r.date);
+      return date.getMonth() === lastMonth && date.getFullYear() === lastMonthYear;
+    });
+    const lastMonthPresent = lastMonthRecords.filter(r => r.status === 'Present').length;
+    const lastMonthLate = lastMonthRecords.filter(r => r.status === 'Late').length;
+    const lastMonthTotal = lastMonthRecords.length;
+    const lastMonthPercentage = lastMonthTotal > 0 ? Math.round(((lastMonthPresent + lastMonthLate) / lastMonthTotal) * 100) : 0;
+    
+    setAttendanceStats({
+      overall: stats.overallPercentage,
+      thisMonth: thisMonthPercentage,
+      lastMonth: lastMonthPercentage,
+      totalPresent: stats.totalPresent,
+      totalAbsent: stats.totalAbsent,
+      totalLate: stats.totalLate,
+      totalDays: stats.totalDays
+    });
+  }, [attendanceRecords]);
+
   const handleAttendanceChange = (index: number, newStatus: string) => {
     const updated = [...attendanceRecords];
     updated[index] = { ...updated[index], status: newStatus as 'Present' | 'Absent' | 'Late' };
     setAttendanceRecords(updated);
+    
+    // Calculate updated stats for toast message
+    const updatedStats = {
+      totalPresent: updated.filter(r => r.status === 'Present').length,
+      totalAbsent: updated.filter(r => r.status === 'Absent').length,
+      totalLate: updated.filter(r => r.status === 'Late').length,
+    };
     
     // Save to Firebase
     if (id) {
@@ -110,7 +187,9 @@ export default function TeacherView() {
       });
     }
     
-    toast.success(`Attendance updated to ${newStatus}`);
+    toast.success(`Attendance updated to ${newStatus}`, {
+      description: `Present: ${updatedStats.totalPresent} | Absent: ${updatedStats.totalAbsent} | Late: ${updatedStats.totalLate}`,
+    });
   };
 
   // Calculate attendance statistics from recent attendance
@@ -119,11 +198,16 @@ export default function TeacherView() {
     const totalAbsent = attendanceRecords.filter(r => r.status === 'Absent').length;
     const totalLate = attendanceRecords.filter(r => r.status === 'Late').length;
     const totalDays = attendanceRecords.length;
+    
+    // Calculate percentage: (Present + Late) / Total * 100
+    const overallPercentage = totalDays > 0 ? Math.round(((totalPresent + totalLate) / totalDays) * 100) : 0;
+    
     return {
       totalPresent,
       totalAbsent,
       totalLate,
-      totalDays
+      totalDays,
+      overallPercentage
     };
   };
 
@@ -143,6 +227,7 @@ export default function TeacherView() {
   const handleShareReport = async () => {
     setIsSharing(true);
     const stats = getAttendanceStats();
+    const filteredRecords = getFilteredAttendance();
     const reportData = {
       name: `${teacherData.firstName} ${teacherData.lastName}`,
       teacherId: teacherData.teacherId,
@@ -164,7 +249,7 @@ export default function TeacherView() {
         totalLate: stats.totalLate,
         totalDays: stats.totalDays,
       },
-      recentAttendance: attendanceRecords.map(r => ({
+      recentAttendance: filteredRecords.map(r => ({
         date: r.date,
         status: r.status,
         time: r.time || '-'
@@ -184,6 +269,7 @@ export default function TeacherView() {
   const handleDownloadReport = () => {
     toast.success('Generating attendance report...');
     const stats = getAttendanceStats();
+    const filteredRecords = getFilteredAttendance();
     const reportData = {
       name: `${teacherData.firstName} ${teacherData.lastName}`,
       teacherId: teacherData.teacherId,
@@ -205,7 +291,7 @@ export default function TeacherView() {
         totalLate: stats.totalLate,
         totalDays: stats.totalDays,
       },
-      recentAttendance: attendanceRecords.map(r => ({
+      recentAttendance: filteredRecords.map(r => ({
         date: r.date,
         status: r.status,
         time: r.time || '-'
@@ -354,20 +440,31 @@ export default function TeacherView() {
                         <p className="text-green-900">Present</p>
                       </div>
                     </div>
-                    <p className="text-2xl text-green-700">{Math.round((getAttendanceStats().totalPresent / (getAttendanceStats().totalDays || 1)) * 100)}%</p>
+                    <p className="text-2xl text-green-700">{attendanceStats.overall}%</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-blue-50 rounded-xl p-3 text-center">
+                      <p className="text-sm text-gray-600 mb-1">This Month</p>
+                      <p className="text-xl text-blue-700">{attendanceStats.thisMonth}%</p>
+                    </div>
+                    <div className="bg-purple-50 rounded-xl p-3 text-center">
+                      <p className="text-sm text-gray-600 mb-1">Last Month</p>
+                      <p className="text-xl text-purple-700">{attendanceStats.lastMonth}%</p>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-200">
                     <div className="text-center">
-                      <p className="text-2xl text-green-600">{getAttendanceStats().totalPresent}</p>
+                      <p className="text-2xl text-green-600">{attendanceStats.totalPresent}</p>
                       <p className="text-xs text-gray-500">Present</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-2xl text-red-600">{getAttendanceStats().totalAbsent}</p>
+                      <p className="text-2xl text-red-600">{attendanceStats.totalAbsent}</p>
                       <p className="text-xs text-gray-500">Absent</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-2xl text-orange-600">{getAttendanceStats().totalLate}</p>
+                      <p className="text-2xl text-orange-600">{attendanceStats.totalLate}</p>
                       <p className="text-xs text-gray-500">Late</p>
                     </div>
                   </div>

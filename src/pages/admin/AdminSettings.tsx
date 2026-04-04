@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { AlertCircle, Upload, RotateCcw, Check } from 'lucide-react';
+import { AlertCircle, Upload, RotateCcw, Check, X, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
@@ -16,6 +16,10 @@ import {
   getLogoFromStorage,
   getThemeFromFirebase,
 } from '../../services/themeService';
+import {
+  getAttendanceSettings,
+  updateAttendanceSettings,
+} from '../../services/attendanceSettingsService';
 
 export default function AdminSettings() {
   const navigate = useNavigate();
@@ -29,6 +33,21 @@ export default function AdminSettings() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Attendance Settings States
+  const [workStartTime, setWorkStartTime] = useState('09:00');
+  const [workEndTime, setWorkEndTime] = useState('17:00');
+  const [lateTimeAllowed, setLateTimeAllowed] = useState(15);
+  const [timezone, setTimezone] = useState('Asia/Karachi');
+  const [institutionName, setInstitutionName] = useState('');
+  const [institutionCode, setInstitutionCode] = useState('');
+  const [phonenumber, setPhonenumber] = useState('');
+  const [address, setAddress] = useState('');
+  const [email, setEmail] = useState('');
+  const [holidays, setHolidays] = useState<string[]>([]);
+  const [newHolidayDate, setNewHolidayDate] = useState('');
+  const [loadingSettings, setLoadingSettings] = useState(true);
+
   const presets = getThemePresets();
 
   // Load theme on mount
@@ -66,11 +85,95 @@ export default function AdminSettings() {
           setLogoPreview(storedLogo);
         }
       }
+
+      // Load attendance settings
+      loadAttendanceSettings();
     } catch (error) {
       console.error('Error loading theme:', error);
       toast.error('Failed to load settings');
+      setLoadingSettings(false);
     }
   }, []);
+
+  // Load attendance settings
+  const loadAttendanceSettings = async () => {
+    try {
+      setLoadingSettings(true);
+      const settings = await getAttendanceSettings();
+      
+      if (settings) {
+        setWorkStartTime(settings.workStartTime);
+        setWorkEndTime(settings.workEndTime);
+        setLateTimeAllowed(settings.lateTimeAllowed);
+        setTimezone(settings.timezone);
+        setInstitutionName(settings.institutionName);
+        setInstitutionCode(settings.institutionCode);
+        setAddress(settings.address || '');
+        setEmail(settings.email || '');
+        setPhonenumber(settings.phone || '');
+        setHolidays(settings.holidays);
+      }
+    } catch (error) {
+      console.error('Error loading attendance settings:', error);
+      toast.error('Failed to load attendance settings');
+    } finally {
+      setLoadingSettings(false);
+    }
+  };
+
+  // Save attendance settings
+  const handleSaveAttendanceSettings = async () => {
+    try {
+      setSaving(true);
+      if (!workStartTime || !workEndTime || !institutionName || !institutionCode) {
+        toast.error('Please fill all required fields');
+        return;
+      }
+
+      await updateAttendanceSettings({
+        workStartTime,
+        workEndTime,
+        lateTimeAllowed,
+        timezone,
+        institutionName,
+        institutionCode,
+        address,
+        email,
+        phone: phonenumber,
+        holidays,
+      });
+
+      toast.success('Attendance settings saved successfully!');
+    } catch (error) {
+      console.error('Error saving attendance settings:', error);
+      toast.error('Failed to save attendance settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Add holiday
+  const handleAddHoliday = () => {
+    if (!newHolidayDate) {
+      toast.error('Please select a date');
+      return;
+    }
+
+    if (holidays.includes(newHolidayDate)) {
+      toast.error('This date is already in holidays');
+      return;
+    }
+
+    setHolidays([...holidays, newHolidayDate]);
+    setNewHolidayDate('');
+    toast.success('Holiday added');
+  };
+
+  // Remove holiday
+  const handleRemoveHoliday = (date: string) => {
+    setHolidays(holidays.filter((h) => h !== date));
+    toast.success('Holiday removed');
+  };
 
   const handlePresetSelect = (presetKey: string) => {
     const preset = presets[presetKey as keyof typeof presets];
@@ -404,6 +507,188 @@ export default function AdminSettings() {
             </div>
           </div>
 
+          {/* Attendance Settings Section */}
+          <div className="bg-white rounded-xl p-6 border border-gray-200 mb-6">
+            <h3 className="text-lg font-semibold mb-6">Attendance Settings</h3>
+            
+            {loadingSettings ? (
+              <p className="text-gray-500">Loading attendance settings...</p>
+            ) : (
+              <div className="space-y-6">
+                {/* Institution Information */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Institution Name *</label>
+                    <Input
+                      type="text"
+                      value={institutionName}
+                      onChange={(e) => setInstitutionName(e.target.value)}
+                      placeholder="e.g., ABC University"
+                      className="border-gray-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Institution Code *</label>
+                    <Input
+                      type="text"
+                      value={institutionCode}
+                      onChange={(e) => setInstitutionCode(e.target.value)}
+                      placeholder="e.g., INST001"
+                      className="border-gray-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
+                    <Input
+                      type="text"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      placeholder="Institution address"
+                      className="border-gray-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                    <Input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="institution@example.com"
+                      className="border-gray-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+                    <Input
+                      type="tel"
+                      value={phonenumber}
+                      onChange={(e) => setPhonenumber(e.target.value)}
+                      placeholder="+92 XXX XXXXXXX"
+                      className="border-gray-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
+                    <select
+                      value={timezone}
+                      onChange={(e) => setTimezone(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2"
+                      style={{ borderColor: '#d1d5db' }}
+                    >
+                      <option value="Asia/Karachi">Asia/Karachi (UTC+5)</option>
+                      <option value="Asia/Dubai">Asia/Dubai (UTC+4)</option>
+                      <option value="Asia/Calcutta">Asia/Calcutta (UTC+5:30)</option>
+                      <option value="Asia/Bangkok">Asia/Bangkok (UTC+7)</option>
+                      <option value="Asia/Singapore">Asia/Singapore (UTC+8)</option>
+                      <option value="UTC">UTC</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Work Hours */}
+                <div className="border-t pt-6">
+                  <h4 className="text-base font-semibold text-gray-900 mb-4">Work Hours</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Work Start Time *</label>
+                      <Input
+                        type="time"
+                        value={workStartTime}
+                        onChange={(e) => setWorkStartTime(e.target.value)}
+                        className="border-gray-300"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">e.g., 10:00 AM</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Work End Time *</label>
+                      <Input
+                        type="time"
+                        value={workEndTime}
+                        onChange={(e) => setWorkEndTime(e.target.value)}
+                        className="border-gray-300"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">e.g., 16:00 (4:00 PM)</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Late Time Allowed (minutes) *</label>
+                      <Input
+                        type="number"
+                        value={lateTimeAllowed}
+                        onChange={(e) => setLateTimeAllowed(parseInt(e.target.value) || 15)}
+                        min="0"
+                        max="120"
+                        className="border-gray-300"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">e.g., 15, 20 minutes</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Holidays */}
+                <div className="border-t pt-6">
+                  <h4 className="text-base font-semibold text-gray-900 mb-4">Holidays</h4>
+                  <div className="space-y-4">
+                    <div className="flex gap-2">
+                      <Input
+                        type="date"
+                        value={newHolidayDate}
+                        onChange={(e) => setNewHolidayDate(e.target.value)}
+                        className="flex-1 border-gray-300"
+                        placeholder="Select holiday date"
+                      />
+                      <Button
+                        onClick={handleAddHoliday}
+                        className="text-white px-6"
+                        style={{ backgroundColor: customColors.primaryColor }}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add
+                      </Button>
+                    </div>
+
+                    {/* Holiday List */}
+                    {holidays.length > 0 ? (
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <p className="text-sm font-medium text-gray-700 mb-3">Added Holidays ({holidays.length})</p>
+                        <div className="flex flex-wrap gap-2">
+                          {holidays.map((holiday) => (
+                            <div
+                              key={holiday}
+                              className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2"
+                            >
+                              <span className="text-sm text-gray-700">{holiday}</span>
+                              <button
+                                onClick={() => handleRemoveHoliday(holiday)}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">No holidays added yet</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Save Button for Attendance Settings */}
+                <div className="border-t pt-6">
+                  <Button
+                    onClick={handleSaveAttendanceSettings}
+                    disabled={saving || loadingSettings}
+                    className="w-full text-white font-semibold py-2 h-12 rounded-xl"
+                    style={{ backgroundColor: customColors.primaryColor }}
+                  >
+                    <Check className="w-4 h-4 mr-2" />
+                    {saving ? 'Saving...' : 'Save Attendance Settings'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Info Box */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex gap-3">
             <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -420,7 +705,10 @@ export default function AdminSettings() {
             <Button
               onClick={handleSave}
               disabled={saving}
-              className="flex-1 bg-[#A982D9] hover:bg-[#9370C5] text-white font-semibold py-2 h-12 rounded-xl"
+              className="flex-1 text-white font-semibold py-2 h-12 rounded-xl"
+              style={{
+                backgroundColor: customColors.primaryColor,
+              }}
             >
               <Check className="w-4 h-4 mr-2" />
               {saving ? 'Saving...' : 'Save Settings'}
@@ -428,7 +716,12 @@ export default function AdminSettings() {
             <Button
               onClick={handleReset}
               variant="outline"
-              className="flex-1 border-2 border-gray-300 text-gray-700 font-semibold py-2 h-12 rounded-xl hover:bg-gray-50"
+              className="flex-1 font-semibold py-2 h-12 rounded-xl hover:bg-gray-50"
+              style={{
+                borderWidth: '2px',
+                borderColor: customColors.primaryColor,
+                color: customColors.primaryColor,
+              }}
             >
               <RotateCcw className="w-4 h-4 mr-2" />
               Reset to Default
