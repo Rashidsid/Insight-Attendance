@@ -514,13 +514,4 @@ export const downloadReport = (html: string, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
-export const printReport = (html: string) => {
-  const printWindow = window.open('', '_blank');
-  if (printWindow) {
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.onload = () => {
-      printWindow.print();
-    };
-  }
-};
+
