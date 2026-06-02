@@ -334,3 +334,331 @@ export const generateTeacherWelcomeHTML = (data: TeacherEmailData): string => {
     </html>
   `;
 };
+
+// Interface for attendance report data
+interface StudentAttendanceReport {
+  email: string;
+  name: string;
+  rollNo: string;
+  class: string;
+  section: string;
+  attendance: {
+    overall: string;
+    thisMonth: string;
+    lastMonth: string;
+    totalPresent: number;
+    totalAbsent: number;
+    totalLate: number;
+    totalDays: number;
+  };
+  recentAttendance: Array<{
+    date: string;
+    status: string;
+  }>;
+}
+
+interface TeacherAttendanceReport {
+  email: string;
+  name: string;
+  teacherId: string;
+  subject: string;
+  totalStudents: number;
+  averageAttendance: string;
+  recentData: Array<{
+    date: string;
+    presentCount: number;
+    absentCount: number;
+  }>;
+}
+
+// Send attendance report to student via email
+export const sendStudentAttendanceReport = async (data: { email: string; name: string; reportHTML: string; filename: string }): Promise<EmailResult> => {
+  try {
+    console.log('[EMAIL] Sending attendance report to student:', data.email);
+    
+    // Send the pre-generated HTML report as email body
+    const emailSent = await sendEmailViaBrevo(
+      data.email,
+      `Attendance Report - ${data.name}`,
+      data.reportHTML
+    );
+
+    if (emailSent) {
+      console.log('[EMAIL] ✅ Student attendance report sent successfully!');
+      return { success: true, method: 'brevo', stored: true };
+    } else {
+      console.log('[EMAIL] Brevo failed, storing in localStorage');
+      const emailPayload = {
+        to: data.email,
+        subject: `Attendance Report - ${data.name}`,
+        html: data.reportHTML,
+        type: 'student_report',
+        timestamp: new Date().toISOString(),
+        status: 'pending',
+      };
+      
+      const pendingEmails = JSON.parse(localStorage.getItem('pendingEmails') || '[]');
+      pendingEmails.push(emailPayload);
+      localStorage.setItem('pendingEmails', JSON.stringify(pendingEmails));
+      
+      return { success: true, method: 'localStorage', stored: true };
+    }
+  } catch (error) {
+    console.error('[EMAIL] Error sending student report:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+};
+
+// Send attendance report to teacher via email
+export const sendTeacherAttendanceReport = async (data: { email: string; name: string; reportHTML: string; filename: string }): Promise<EmailResult> => {
+  try {
+    console.log('[EMAIL] Sending attendance report to teacher:', data.email);
+    
+    // Send the pre-generated HTML report as email body
+    const emailSent = await sendEmailViaBrevo(
+      data.email,
+      `Attendance Report - ${data.name}`,
+      data.reportHTML
+    );
+
+    if (emailSent) {
+      console.log('[EMAIL] ✅ Teacher attendance report sent successfully!');
+      return { success: true, method: 'brevo', stored: true };
+    } else {
+      console.log('[EMAIL] Brevo failed, storing in localStorage');
+      const emailPayload = {
+        to: data.email,
+        subject: `Attendance Report - ${data.name}`,
+        html: data.reportHTML,
+        type: 'teacher_report',
+        timestamp: new Date().toISOString(),
+        status: 'pending',
+      };
+      
+      const pendingEmails = JSON.parse(localStorage.getItem('pendingEmails') || '[]');
+      pendingEmails.push(emailPayload);
+      localStorage.setItem('pendingEmails', JSON.stringify(pendingEmails));
+      
+      return { success: true, method: 'localStorage', stored: true };
+    }
+  } catch (error) {
+    console.error('[EMAIL] Error sending teacher report:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+};
+
+// Generate HTML for student attendance report
+export const generateStudentReportHTML = (data: StudentAttendanceReport): string => {
+  const recentRows = data.recentAttendance.slice(0, 10).map(record => `
+    <tr>
+      <td style="padding: 12px; border-bottom: 1px solid #eee;">${record.date}</td>
+      <td style="padding: 12px; border-bottom: 1px solid #eee;">
+        <span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-weight: 600; 
+          background-color: ${record.status === 'Present' ? '#D1FAE5' : record.status === 'Absent' ? '#FEE2E2' : '#FEF3C7'};
+          color: ${record.status === 'Present' ? '#065F46' : record.status === 'Absent' ? '#7F1D1D' : '#92400E'};">
+          ${record.status}
+        </span>
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 700px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #A982D9 0%, #9770C8 100%); color: white; padding: 30px; text-align: center; }
+        .header h1 { margin: 0; font-size: 28px; font-weight: 600; }
+        .content { padding: 30px; color: #333; }
+        .report-title { font-size: 20px; font-weight: 600; margin-bottom: 25px; color: #A982D9; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .info-card { background-color: #f9f9f9; padding: 15px; border-radius: 6px; border-left: 4px solid #A982D9; }
+        .info-label { font-size: 12px; color: #999; text-transform: uppercase; font-weight: 600; }
+        .info-value { font-size: 18px; font-weight: 600; color: #333; margin-top: 5px; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px; margin-bottom: 30px; }
+        .stat-box { background: linear-gradient(135deg, #E0C3FC 0%, #D4A5FF 100%); padding: 20px; border-radius: 8px; text-align: center; }
+        .stat-label { font-size: 12px; color: #666; font-weight: 600; }
+        .stat-value { font-size: 28px; font-weight: 700; color: #333; margin-top: 8px; }
+        .table-section { margin-top: 30px; }
+        .table-title { font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #333; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background-color: #f0f0f0; padding: 12px; text-align: left; font-weight: 600; color: #666; border-bottom: 2px solid #ddd; }
+        .footer { background-color: #f5f5f5; padding: 20px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Attendance Report</h1>
+          <p>Your Monthly Summary</p>
+        </div>
+        <div class="content">
+          <div class="report-title">Attendance Summary for ${data.name}</div>
+          
+          <div class="info-grid">
+            <div class="info-card">
+              <div class="info-label">Roll Number</div>
+              <div class="info-value">${data.rollNo}</div>
+            </div>
+            <div class="info-card">
+              <div class="info-label">Class</div>
+              <div class="info-value">${data.class} - ${data.section}</div>
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-box">
+              <div class="stat-label">Overall Attendance</div>
+              <div class="stat-value">${data.attendance.overall}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Total Present</div>
+              <div class="stat-value">${data.attendance.totalPresent}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Total Absent</div>
+              <div class="stat-value">${data.attendance.totalAbsent}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Total Late</div>
+              <div class="stat-value">${data.attendance.totalLate}</div>
+            </div>
+          </div>
+
+          <div class="table-section">
+            <div class="table-title">Recent Attendance Records</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${recentRows}
+              </tbody>
+            </table>
+          </div>
+
+          <p style="margin-top: 25px; font-size: 14px; color: #666;">
+            <strong>Note:</strong> This is an automated report generated from the Insight Attendance System. For any queries or discrepancies, please contact your institution's administration.
+          </p>
+        </div>
+        <div class="footer">
+          <p>&copy; 2024 Insight Attendance System. All rights reserved.</p>
+          <p>This email was sent to ${data.email} on ${new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+// Generate HTML for teacher attendance report
+export const generateTeacherReportHTML = (data: TeacherAttendanceReport): string => {
+  const recentRows = data.recentData.slice(0, 10).map(record => `
+    <tr>
+      <td style="padding: 12px; border-bottom: 1px solid #eee;">${record.date}</td>
+      <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">
+        <span style="background-color: #D1FAE5; color: #065F46; padding: 4px 12px; border-radius: 4px; font-weight: 600;">
+          ${record.presentCount}
+        </span>
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">
+        <span style="background-color: #FEE2E2; color: #7F1D1D; padding: 4px 12px; border-radius: 4px; font-weight: 600;">
+          ${record.absentCount}
+        </span>
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 700px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #A982D9 0%, #9770C8 100%); color: white; padding: 30px; text-align: center; }
+        .header h1 { margin: 0; font-size: 28px; font-weight: 600; }
+        .content { padding: 30px; color: #333; }
+        .report-title { font-size: 20px; font-weight: 600; margin-bottom: 25px; color: #A982D9; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .info-card { background-color: #f9f9f9; padding: 15px; border-radius: 6px; border-left: 4px solid #A982D9; }
+        .info-label { font-size: 12px; color: #999; text-transform: uppercase; font-weight: 600; }
+        .info-value { font-size: 18px; font-weight: 600; color: #333; margin-top: 5px; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 30px; }
+        .stat-box { background: linear-gradient(135deg, #E0C3FC 0%, #D4A5FF 100%); padding: 20px; border-radius: 8px; text-align: center; }
+        .stat-label { font-size: 12px; color: #666; font-weight: 600; }
+        .stat-value { font-size: 28px; font-weight: 700; color: #333; margin-top: 8px; }
+        .table-section { margin-top: 30px; }
+        .table-title { font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #333; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background-color: #f0f0f0; padding: 12px; text-align: left; font-weight: 600; color: #666; border-bottom: 2px solid #ddd; }
+        .footer { background-color: #f5f5f5; padding: 20px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Attendance Report</h1>
+          <p>Your Class Summary</p>
+        </div>
+        <div class="content">
+          <div class="report-title">Attendance Summary for ${data.name}</div>
+          
+          <div class="info-grid">
+            <div class="info-card">
+              <div class="info-label">Teacher ID</div>
+              <div class="info-value">${data.teacherId}</div>
+            </div>
+            <div class="info-card">
+              <div class="info-label">Subject</div>
+              <div class="info-value">${data.subject}</div>
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-box">
+              <div class="stat-label">Total Students</div>
+              <div class="stat-value">${data.totalStudents}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Average Attendance</div>
+              <div class="stat-value">${data.averageAttendance}</div>
+            </div>
+          </div>
+
+          <div class="table-section">
+            <div class="table-title">Recent Attendance Overview</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Present</th>
+                  <th>Absent</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${recentRows}
+              </tbody>
+            </table>
+          </div>
+
+          <p style="margin-top: 25px; font-size: 14px; color: #666;">
+            <strong>Note:</strong> This is an automated report generated from the Insight Attendance System. For any queries or discrepancies, please contact the administration.
+          </p>
+        </div>
+        <div class="footer">
+          <p>&copy; 2024 Insight Attendance System. All rights reserved.</p>
+          <p>This email was sent to ${data.email} on ${new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};

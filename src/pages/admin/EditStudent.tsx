@@ -9,6 +9,16 @@ import { ArrowLeft, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { getStudentById, updateStudent } from '../../services/studentService';
 import { getUniqueClassNames, getSectionsForClass } from '../../services/classService';
+import {
+  validateName,
+  validateRollNumber,
+  validateDateOfBirth,
+  validateAdmissionDate,
+  validateGender,
+  validateEmail,
+  validatePhone,
+  validateRequired
+} from '../../utils/validators';
 
 export default function EditStudent() {
   const navigate = useNavigate();
@@ -18,6 +28,7 @@ export default function EditStudent() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingStudent, setLoadingStudent] = useState(true);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -116,6 +127,61 @@ export default function EditStudent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate all fields
+    const newErrors: Record<string, string> = {};
+    
+    // Required field validations
+    const firstNameValidation = validateName(formData.firstName, "First Name");
+    if (!firstNameValidation.valid) newErrors.firstName = firstNameValidation.error!;
+    
+    const lastNameValidation = validateName(formData.lastName, "Last Name");
+    if (!lastNameValidation.valid) newErrors.lastName = lastNameValidation.error!;
+    
+    const rollNoValidation = validateRollNumber(formData.rollNo);
+    if (!rollNoValidation.valid) newErrors.rollNo = rollNoValidation.error!;
+    
+    const dobValidation = validateDateOfBirth(formData.dateOfBirth);
+    if (!dobValidation.valid) newErrors.dateOfBirth = dobValidation.error!;
+    
+    const admissionValidation = validateAdmissionDate(formData.admissionDate);
+    if (!admissionValidation.valid) newErrors.admissionDate = admissionValidation.error!;
+    
+    const genderValidation = validateGender(formData.gender);
+    if (!genderValidation.valid) newErrors.gender = genderValidation.error!;
+    
+    const classValidation = validateRequired(formData.class, "Class");
+    if (!classValidation.valid) newErrors.class = classValidation.error!;
+    
+    const sectionValidation = validateRequired(formData.section, "Section");
+    if (!sectionValidation.valid) newErrors.section = sectionValidation.error!;
+    
+    const parentNameValidation = validateName(formData.parentName, "Parent Name");
+    if (!parentNameValidation.valid) newErrors.parentName = parentNameValidation.error!;
+    
+    const parentPhoneValidation = validatePhone(formData.parentPhone);
+    if (!parentPhoneValidation.valid) newErrors.parentPhone = parentPhoneValidation.error!;
+    
+    // Optional field validations (only validate if filled)
+    if (formData.email && !validateEmail(formData.email).valid) {
+      newErrors.email = validateEmail(formData.email).error!;
+    }
+    
+    if (formData.phone && !validatePhone(formData.phone).valid) {
+      newErrors.phone = validatePhone(formData.phone).error!;
+    }
+    
+    if (formData.parentEmail && !validateEmail(formData.parentEmail).valid) {
+      newErrors.parentEmail = validateEmail(formData.parentEmail).error!;
+    }
+    
+    setErrors(newErrors);
+    
+    if (Object.keys(newErrors).length > 0) {
+      toast.error('Please fix the validation errors');
+      return;
+    }
+    
     try {
       setLoading(true);
       if (!id) return;
@@ -245,60 +311,83 @@ export default function EditStudent() {
                   <Input
                     id="firstName"
                     placeholder="Enter first name"
-                    className="h-12 rounded-xl mt-2"
+                    className={`h-12 rounded-xl mt-2 ${errors.firstName ? 'border-red-500' : ''}`}
                     value={formData.firstName}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, firstName: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFormData({ ...formData, firstName: e.target.value });
+                      if (errors.firstName) setErrors({ ...errors, firstName: '' });
+                    }}
                     required
                   />
+                  {errors.firstName && <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>}
                 </div>
                 <div>
                   <Label htmlFor="lastName">Last Name *</Label>
                   <Input
                     id="lastName"
                     placeholder="Enter last name"
-                    className="h-12 rounded-xl mt-2"
+                    className={`h-12 rounded-xl mt-2 ${errors.lastName ? 'border-red-500' : ''}`}
                     value={formData.lastName}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, lastName: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFormData({ ...formData, lastName: e.target.value });
+                      if (errors.lastName) setErrors({ ...errors, lastName: '' });
+                    }}
                     required
                   />
+                  {errors.lastName && <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>}
                 </div>
                 <div>
                   <Label htmlFor="rollNo">Roll Number *</Label>
                   <Input
                     id="rollNo"
                     placeholder="e.g., STU001"
-                    className="h-12 rounded-xl mt-2"
+                    className={`h-12 rounded-xl mt-2 ${errors.rollNo ? 'border-red-500' : ''}`}
                     value={formData.rollNo}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, rollNo: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFormData({ ...formData, rollNo: e.target.value });
+                      if (errors.rollNo) setErrors({ ...errors, rollNo: '' });
+                    }}
                     required
                   />
+                  {errors.rollNo && <p className="text-red-500 text-sm mt-1">{errors.rollNo}</p>}
                 </div>
                 <div>
                   <Label htmlFor="dateOfBirth">Date of Birth *</Label>
                   <Input
                     id="dateOfBirth"
                     type="date"
-                    className="h-12 rounded-xl mt-2"
+                    className={`h-12 rounded-xl mt-2 ${errors.dateOfBirth ? 'border-red-500' : ''}`}
                     value={formData.dateOfBirth}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFormData({ ...formData, dateOfBirth: e.target.value });
+                      if (errors.dateOfBirth) setErrors({ ...errors, dateOfBirth: '' });
+                    }}
                     required
                   />
+                  {errors.dateOfBirth && <p className="text-red-500 text-sm mt-1">{errors.dateOfBirth}</p>}
                 </div>
                 <div>
                   <Label htmlFor="admissionDate">Admission Date *</Label>
                   <Input
                     id="admissionDate"
                     type="date"
-                    className="h-12 rounded-xl mt-2"
+                    className={`h-12 rounded-xl mt-2 ${errors.admissionDate ? 'border-red-500' : ''}`}
                     value={formData.admissionDate}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, admissionDate: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFormData({ ...formData, admissionDate: e.target.value });
+                      if (errors.admissionDate) setErrors({ ...errors, admissionDate: '' });
+                    }}
                     required
                   />
+                  {errors.admissionDate && <p className="text-red-500 text-sm mt-1">{errors.admissionDate}</p>}
                 </div>
                 <div>
                   <Label htmlFor="class">Class *</Label>
-                  <Select value={formData.class} onValueChange={(value: string) => setFormData({ ...formData, class: value })}>
-                    <SelectTrigger className="h-12 rounded-xl mt-2">
+                  <Select value={formData.class} onValueChange={(value: string) => {
+                    setFormData({ ...formData, class: value });
+                    if (errors.class) setErrors({ ...errors, class: '' });
+                  }}>
+                    <SelectTrigger className={`h-12 rounded-xl mt-2 ${errors.class ? 'border-red-500' : ''}`}>
                       <SelectValue placeholder="Select class" />
                     </SelectTrigger>
                     <SelectContent>
@@ -321,15 +410,19 @@ export default function EditStudent() {
                       )}
                     </SelectContent>
                   </Select>
+                  {errors.class && <p className="text-red-500 text-sm mt-1">{errors.class}</p>}
                 </div>
                 <div>
                   <Label htmlFor="section">Section *</Label>
                   <Select 
                     value={formData.section} 
-                    onValueChange={(value: string) => setFormData({ ...formData, section: value })}
+                    onValueChange={(value: string) => {
+                      setFormData({ ...formData, section: value });
+                      if (errors.section) setErrors({ ...errors, section: '' });
+                    }}
                     disabled={!formData.class}
                   >
-                    <SelectTrigger className="h-12 rounded-xl mt-2">
+                    <SelectTrigger className={`h-12 rounded-xl mt-2 ${errors.section ? 'border-red-500' : ''}`}>
                       <SelectValue placeholder={formData.class ? "Select section" : "Select class first"} />
                     </SelectTrigger>
                     <SelectContent>
@@ -345,11 +438,15 @@ export default function EditStudent() {
                       )}
                     </SelectContent>
                   </Select>
+                  {errors.section && <p className="text-red-500 text-sm mt-1">{errors.section}</p>}
                 </div>
                 <div>
                   <Label htmlFor="gender">Gender *</Label>
-                  <Select value={formData.gender} onValueChange={(value: string) => setFormData({ ...formData, gender: value })}>
-                    <SelectTrigger className="h-12 rounded-xl mt-2">
+                  <Select value={formData.gender} onValueChange={(value: string) => {
+                    setFormData({ ...formData, gender: value });
+                    if (errors.gender) setErrors({ ...errors, gender: '' });
+                  }}>
+                    <SelectTrigger className={`h-12 rounded-xl mt-2 ${errors.gender ? 'border-red-500' : ''}`}>
                       <SelectValue placeholder="Select gender" />
                     </SelectTrigger>
                     <SelectContent>
@@ -358,6 +455,7 @@ export default function EditStudent() {
                       <SelectItem value="Other">Other</SelectItem>
                     </SelectContent>
                   </Select>
+                  {errors.gender && <p className="text-red-500 text-sm mt-1">{errors.gender}</p>}
                 </div>
               </div>
             </div>
@@ -372,10 +470,14 @@ export default function EditStudent() {
                     id="email"
                     type="email"
                     placeholder="student@example.com"
-                    className="h-12 rounded-xl mt-2"
+                    className={`h-12 rounded-xl mt-2 ${errors.email ? 'border-red-500' : ''}`}
                     value={formData.email}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, email: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFormData({ ...formData, email: e.target.value });
+                      if (errors.email) setErrors({ ...errors, email: '' });
+                    }}
                   />
+                  {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
                 </div>
                 <div>
                   <Label htmlFor="phone">Phone Number</Label>
@@ -383,10 +485,14 @@ export default function EditStudent() {
                     id="phone"
                     type="tel"
                     placeholder="+1 (555) 000-0000"
-                    className="h-12 rounded-xl mt-2"
+                    className={`h-12 rounded-xl mt-2 ${errors.phone ? 'border-red-500' : ''}`}
                     value={formData.phone}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, phone: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFormData({ ...formData, phone: e.target.value });
+                      if (errors.phone) setErrors({ ...errors, phone: '' });
+                    }}
                   />
+                  {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
                 </div>
                 <div className="col-span-2">
                   <Label htmlFor="address">Address</Label>
@@ -410,11 +516,15 @@ export default function EditStudent() {
                   <Input
                     id="parentName"
                     placeholder="Enter parent name"
-                    className="h-12 rounded-xl mt-2"
+                    className={`h-12 rounded-xl mt-2 ${errors.parentName ? 'border-red-500' : ''}`}
                     value={formData.parentName}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, parentName: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFormData({ ...formData, parentName: e.target.value });
+                      if (errors.parentName) setErrors({ ...errors, parentName: '' });
+                    }}
                     required
                   />
+                  {errors.parentName && <p className="text-red-500 text-sm mt-1">{errors.parentName}</p>}
                 </div>
                 <div>
                   <Label htmlFor="parentPhone">Parent Phone Number *</Label>
@@ -422,11 +532,15 @@ export default function EditStudent() {
                     id="parentPhone"
                     type="tel"
                     placeholder="+1 (555) 000-0000"
-                    className="h-12 rounded-xl mt-2"
+                    className={`h-12 rounded-xl mt-2 ${errors.parentPhone ? 'border-red-500' : ''}`}
                     value={formData.parentPhone}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, parentPhone: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFormData({ ...formData, parentPhone: e.target.value });
+                      if (errors.parentPhone) setErrors({ ...errors, parentPhone: '' });
+                    }}
                     required
                   />
+                  {errors.parentPhone && <p className="text-red-500 text-sm mt-1">{errors.parentPhone}</p>}
                 </div>
                 <div>
                   <Label htmlFor="parentEmail">Parent Email Address</Label>
@@ -434,10 +548,14 @@ export default function EditStudent() {
                     id="parentEmail"
                     type="email"
                     placeholder="parent@example.com"
-                    className="h-12 rounded-xl mt-2"
+                    className={`h-12 rounded-xl mt-2 ${errors.parentEmail ? 'border-red-500' : ''}`}
                     value={formData.parentEmail}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, parentEmail: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFormData({ ...formData, parentEmail: e.target.value });
+                      if (errors.parentEmail) setErrors({ ...errors, parentEmail: '' });
+                    }}
                   />
+                  {errors.parentEmail && <p className="text-red-500 text-sm mt-1">{errors.parentEmail}</p>}
                 </div>
               </div>
             </div>

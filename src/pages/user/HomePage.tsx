@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Camera, UserCircle, AlertCircle, CheckCircle } from 'lucide-react';
+import * as faceapi from 'face-api.js';
 import { useTheme } from '../../contexts/ThemeContext';
 import { 
   recognizeFaceFromVideo,
@@ -29,24 +30,73 @@ export default function HomePage() {
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const detectIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load face-api models on component mount
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        console.log('[INFO] Loading face detection models...');
+        // Try multiple CDN sources
+        const modelUrls = [
+          'https://unpkg.com/face-api.js@0.22.2/dist/models/',
+          'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/models/'
+        ];
+        
+        let loaded = false;
+        
+        for (const modelsUrl of modelUrls) {
+          try {
+            console.log(`[INFO] Trying to load models from: ${modelsUrl}`);
+            await Promise.all([
+              faceapi.nets.tinyFaceDetector.loadFromUri(modelsUrl),
+              faceapi.nets.faceLandmark68Net.loadFromUri(modelsUrl),
+              faceapi.nets.faceRecognitionNet.loadFromUri(modelsUrl)
+            ]);
+            
+            console.log('[SUCCESS] ✓ Face detection models loaded');
+            loaded = true;
+            break;
+          } catch (err) {
+            console.warn(`[WARN] Failed to load from ${modelsUrl}:`, err);
+            continue;
+          }
+        }
+        
+        if (loaded) {
+          setModelsLoaded(true);
+        } else {
+          console.warn('[WARN] Face detection models could not be loaded from any CDN. Using fallback face detection.');
+          setModelsLoaded(false);
+          // Don't show error - allow camera to work with basic detection
+        }
+      } catch (err) {
+        console.error('[ERROR] Face detection initialization error:', err);
+        setModelsLoaded(false);
+      }
+    };
+    
+    loadModels();
+  }, []);
 
   // Check Python API availability on component mount
   useEffect(() => {
     const checkAPI = async () => {
       try {
-        console.log('Checking Python Face API availability...');
+        console.log('[INFO] Checking Python Face API availability...');
         const isAvailable = await checkPythonAPIAvailability();
         if (!isAvailable) {
           setError('Python Face API is not running. Please start the Python API server at localhost:5000');
-          console.warn('Python API not available');
+          console.warn('[WARN] Python API not available');
         } else {
-          console.log('✓ Python Face API is available');
+          console.log('[SUCCESS] ✓ Python Face API is available');
         }
       } catch (err) {
-        console.error('Failed to check API:', err);
+        console.error('[ERROR] Failed to check API:', err);
       }
     };
     
@@ -97,26 +147,142 @@ export default function HomePage() {
   };
 
   const startFaceDetection = () => {
-    if (!videoRef.current) return;
-    
-    // Simple face detection - check if video is properly playing
-    // Python API will handle actual face detection and recognition
-    const checkVideo = () => {
+    if (!videoRef.current) {
+      console.warn('[WARN] Video ref not available');
+      return;
+    }
+
+    console.log('[INFO] Starting face detection...');
+
+    // Clear any existing interval
+    if (detectIntervalRef.current) {
+      clearInterval(detectIntervalRef.current);
+    }
+
+    const detectFace = async () => {
       if (!videoRef.current) return;
-      
-      // Check if video has data and is playing
-      const isPlaying = videoRef.current.currentTime > 0 && !videoRef.current.paused;
-      setFaceDetected(isPlaying);
+
+      try {
+        const video = videoRef.current;
+
+        // Check if video is ready and has dimensions
+        if (video.readyState !== 4 || video.videoWidth === 0 || video.videoHeight === 0) {
+          setFaceDetected(false);
+          return;
+        }
+
+        // If models are loaded, use ML-based detection
+        if (modelsLoaded) {
+          try {
+            // Detect all faces in the video stream
+            const detections = await faceapi.detectAllFaces(
+              video,
+              new faceapi.TinyFaceDetectorOptions({
+                inputSize: 416,
+                scoreThreshold: 0.5
+              })
+            );
+
+            // Update face detected status based on actual detection
+            const hasFace = detections && detections.length > 0;
+            setFaceDetected(hasFace);
+
+            if (hasFace) {
+              console.log(`[INFO] ✓ Face detected! Found ${detections.length} face(s)`);
+            }
+          } catch (error) {
+            console.error('[ERROR] ML face detection error:', error);
+            setFaceDetected(false);
+          }
+        } else {
+          // Fallback: Canvas-based face detection using skin tone analysis
+          // Analyzes center of frame (100x100 area where face would be)
+          if (!canvasRef.current) {
+            setFaceDetected(false);
+            return;
+          }
+
+          try {
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            
+            if (!ctx) {
+              setFaceDetected(false);
+              return;
+            }
+
+            // Draw video to canvas
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+
+            // Get image data from center area of canvas (100x100 area where face would be)
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const sampleSize = 100; // Sample from 100x100 area in center
+            
+            const imageData = ctx.getImageData(
+              centerX - sampleSize / 2,
+              centerY - sampleSize / 2,
+              sampleSize,
+              sampleSize
+            );
+
+            const data = imageData.data;
+            let skinTonePixels = 0;
+
+            // Analyze pixels for skin tone characteristics
+            // Skin tone detection: R > 95, G > 40, B > 20, |R-G| > 15
+            for (let i = 0; i < data.length; i += 4) {
+              const r = data[i];
+              const g = data[i + 1];
+              const b = data[i + 2];
+
+              // Check for skin-like color
+              if (
+                r > 95 && g > 40 && b > 20 &&
+                Math.abs(r - g) > 15 &&
+                r > g && r > b
+              ) {
+                skinTonePixels++;
+              }
+            }
+
+            // If more than 20% of sampled pixels are skin-tone, consider face detected
+            const faceConfidence = (skinTonePixels / (sampleSize * sampleSize)) * 100;
+            const faceDetected = faceConfidence > 20;
+            
+            setFaceDetected(faceDetected);
+
+            if (faceDetected) {
+              console.log(`[INFO] ✓ Possible face detected! Confidence: ${faceConfidence.toFixed(1)}%`);
+            }
+          } catch (error) {
+            console.error('[ERROR] Fallback face detection error:', error);
+            setFaceDetected(false);
+          }
+        }
+      } catch (error) {
+        console.error('[ERROR] Face detection error:', error);
+        setFaceDetected(false);
+      }
     };
 
-    // Check video status every 500ms
-    const interval = setInterval(checkVideo, 500);
+    // Start face detection loop - every 300ms
+    detectIntervalRef.current = setInterval(detectFace, 300);
     
-    // Clean up on camera stop
-    return () => clearInterval(interval);
+    // Run detection immediately
+    detectFace();
   };
 
   const stopCamera = () => {
+    // Clear detection interval
+    if (detectIntervalRef.current) {
+      clearInterval(detectIntervalRef.current);
+      detectIntervalRef.current = null;
+    }
+
+    // Stop video stream
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -421,7 +587,7 @@ export default function HomePage() {
               {/* Recognized ID */}
               <div>
                 <label className="text-white text-sm font-semibold uppercase tracking-wide mb-2 block">
-                  {recognitionResult?.role === 'teacher' ? 'Teacher ID' : 'Roll No'}
+                  {recognitionResult?.role === 'teacher' ? 'Teacher ID' : 'ID'}
                 </label>
                 <div className="bg-slate-800/70 rounded-lg p-4 border border-slate-700 backdrop-blur-sm">
                   {recognitionResult?.matched ? (

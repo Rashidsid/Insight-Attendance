@@ -10,6 +10,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { generateTeacherReport, downloadReport } from '../../utils/reportGenerator';
 import { getTeacherById, updateTeacherStatus, updateTeacherAttendance } from '../../services/teacherService';
 import { getPersonalAttendanceByPeriod } from '../../services/attendanceService';
+import { sendTeacherAttendanceReport } from '../../services/emailService';
 
 // Default mock teacher data structure
 const getDefaultTeacherData = () => ({
@@ -226,44 +227,67 @@ export default function TeacherView() {
 
   const handleShareReport = async () => {
     setIsSharing(true);
-    const stats = getAttendanceStats();
-    const filteredRecords = getFilteredAttendance();
-    const reportData = {
-      name: `${teacherData.firstName} ${teacherData.lastName}`,
-      teacherId: teacherData.teacherId,
-      subject: teacherData.subject,
-      classes: teacherData.classes.split(', ').filter(c => c),
-      dateOfBirth: teacherData.dateOfBirth,
-      gender: teacherData.gender,
-      email: teacherData.email,
-      phone: teacherData.phone,
-      qualification: teacherData.qualification,
-      experience: teacherData.experience,
-      joiningDate: teacherData.joiningDate,
-      attendance: {
-        overall: `${Math.round((stats.totalPresent / (stats.totalDays || 1)) * 100)}%`,
-        thisMonth: `${Math.round((stats.totalPresent / (stats.totalDays || 1)) * 100)}%`,
-        lastMonth: `${Math.max(0, Math.round((stats.totalPresent / (stats.totalDays || 1)) * 100) - 5)}%`,
-        totalPresent: stats.totalPresent,
-        totalAbsent: stats.totalAbsent,
-        totalLate: stats.totalLate,
-        totalDays: stats.totalDays,
-      },
-      recentAttendance: filteredRecords.map(r => ({
-        date: r.date,
-        status: r.status,
-        time: r.time || '-'
-      }))
-    };
-    generateTeacherReport(reportData as any);
-    
-    // Simulate sending email with the report
-    setTimeout(() => {
-      setIsSharing(false);
-      toast.success(`Attendance report sent successfully to ${teacherData.email}!`, {
-        description: 'The report has been delivered to the teacher\'s email address.',
+    try {
+      const stats = getAttendanceStats();
+      const filteredRecords = getFilteredAttendance();
+      
+      // Generate the same report as Download Report
+      const reportData = {
+        name: `${teacherData.firstName} ${teacherData.lastName}`,
+        teacherId: teacherData.teacherId,
+        subject: teacherData.subject,
+        classes: teacherData.classes.split(', ').filter(c => c),
+        dateOfBirth: teacherData.dateOfBirth,
+        gender: teacherData.gender,
+        email: teacherData.email,
+        phone: teacherData.phone,
+        qualification: teacherData.qualification,
+        experience: teacherData.experience,
+        joiningDate: teacherData.joiningDate,
+        attendance: {
+          overall: `${Math.round((stats.totalPresent / (stats.totalDays || 1)) * 100)}%`,
+          thisMonth: `${Math.round((stats.totalPresent / (stats.totalDays || 1)) * 100)}%`,
+          lastMonth: `${Math.max(0, Math.round((stats.totalPresent / (stats.totalDays || 1)) * 100) - 5)}%`,
+          totalPresent: stats.totalPresent,
+          totalAbsent: stats.totalAbsent,
+          totalLate: stats.totalLate,
+          totalDays: stats.totalDays,
+        },
+        recentAttendance: filteredRecords.map(r => ({
+          date: r.date,
+          status: r.status,
+          time: r.time || '-'
+        }))
+      };
+      
+      // Generate the full HTML report
+      const reportHTML = generateTeacherReport(reportData as any);
+      const filename = `${teacherData.firstName}_${teacherData.lastName}_Attendance_Report_${new Date().toISOString().split('T')[0]}.html`;
+      
+      // Send email with the report
+      const result = await sendTeacherAttendanceReport({
+        email: teacherData.email,
+        name: `${teacherData.firstName} ${teacherData.lastName}`,
+        reportHTML: reportHTML,
+        filename: filename,
       });
-    }, 2000);
+      
+      setIsSharing(false);
+      
+      if (result.success) {
+        toast.success(`Attendance report sent successfully to ${teacherData.email}!`, {
+          description: `The report file "${filename}" has been sent to the teacher's email address.`,
+        });
+      } else {
+        toast.error('Failed to send report', {
+          description: result.error || 'An error occurred while sending the email.',
+        });
+      }
+    } catch (error) {
+      setIsSharing(false);
+      toast.error('Failed to generate and send report');
+      console.error(error);
+    }
   };
 
   const handleDownloadReport = () => {

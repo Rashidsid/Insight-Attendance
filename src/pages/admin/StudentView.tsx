@@ -10,6 +10,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { generateStudentReport, downloadReport } from '../../utils/reportGenerator';
 import { getStudentById, updateStudentStatus, updateStudentAttendance } from '../../services/studentService';
 import { getAttendanceByStudent, getPersonalAttendanceByPeriod } from '../../services/attendanceService';
+import { sendStudentAttendanceReport } from '../../services/emailService';
 
 // Default mock student data structure
 const getDefaultStudentData = () => ({
@@ -268,6 +269,8 @@ export default function StudentView() {
     try {
       const stats = getAttendanceStats();
       const filteredRecords = getFilteredAttendance();
+      
+      // Generate the same report as Download Report
       const reportData = {
         ...studentData,
         name: `${studentData.firstName} ${studentData.lastName}`,
@@ -282,18 +285,33 @@ export default function StudentView() {
           totalDays: stats.totalDays,
         }
       };
-      generateStudentReport(reportData);
-
-      // Simulate sending email with the report
-      setTimeout(() => {
-        setIsSharing(false);
+      
+      // Generate the full HTML report
+      const reportHTML = generateStudentReport(reportData);
+      const filename = `${studentData.firstName}_${studentData.lastName}_Attendance_Report_${new Date().toISOString().split('T')[0]}.html`;
+      
+      // Send email with the report
+      const result = await sendStudentAttendanceReport({
+        email: studentData.email,
+        name: `${studentData.firstName} ${studentData.lastName}`,
+        reportHTML: reportHTML,
+        filename: filename,
+      });
+      
+      setIsSharing(false);
+      
+      if (result.success) {
         toast.success(`Attendance report sent successfully to ${studentData.email}!`, {
-          description: 'The report has been delivered to the student\'s email address.',
+          description: `The report file "${filename}" has been sent to the student's email address.`,
         });
-      }, 2000);
+      } else {
+        toast.error('Failed to send report', {
+          description: result.error || 'An error occurred while sending the email.',
+        });
+      }
     } catch (error) {
       setIsSharing(false);
-      toast.error('Failed to generate report');
+      toast.error('Failed to generate and send report');
       console.error(error);
     }
   };

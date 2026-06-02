@@ -4,7 +4,7 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
 
-// Your web app's Firebase configuration
+//  web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyBEkzUI4dTkL96ayS6RqqOWZHIgauygxaA",
   authDomain: "insight-attendance-system.firebaseapp.com",
