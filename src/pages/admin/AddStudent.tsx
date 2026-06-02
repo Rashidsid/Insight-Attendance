@@ -241,7 +241,7 @@ export default function AddStudent() {
           rollNo: formData.rollNo,
           class: formData.class,
           section: formData.section,
-          instituteName: 'Herald College Kathmandu',
+          instituteName: 'Insight Attendance System',
         });
 
         if (emailResult.success) {

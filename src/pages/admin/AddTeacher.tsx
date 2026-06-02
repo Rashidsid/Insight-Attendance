@@ -196,7 +196,7 @@ export default function AddTeacher() {
           lastName: formData.lastName,
           teacherId: formData.teacherId,
           subject: formData.subject,
-          instituteName: 'Herald College Kathmandu',
+          instituteName: 'Insight Attendance System',
         });
 
         if (emailResult.success) {

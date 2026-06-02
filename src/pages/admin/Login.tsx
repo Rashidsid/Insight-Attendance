@@ -59,7 +59,7 @@ export default function Login() {
           <div className="flex-1 flex items-center">
             <div>
               <h2 className="text-white text-4xl font-light mb-2">Welcome to</h2>
-              <h3 className="text-yellow-400 text-5xl font-bold">Herald College Kathmandu</h3>
+              <h3 className="text-yellow-400 text-5xl font-bold">Insight Attendance System</h3>
             </div>
           </div>
 
